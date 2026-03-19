@@ -187,9 +187,7 @@ def display_analysis(analysis):
         elif change > 0:
             change_str += " ↑"
 
-        improving_str = ", ".join(d["improving_tiles"][:10])
-        if len(d["improving_tiles"]) > 10:
-            improving_str += f" (+{len(d['improving_tiles'])-10} more)"
+        improving_str = ", ".join(d["improving_tiles"])
 
         marker = " ★" if rank == 1 else ""
         print(f"  {rank:<5} {d['tile_name']:<12} {change_str:<9} "
