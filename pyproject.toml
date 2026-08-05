@@ -4,13 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "singapore-mahjong-ai"
-version = "0.6.0"
+version = "0.7.0"
 description = "Singapore Mahjong game engine, AI agents, and discard advisor"
 requires-python = ">=3.9"
 
 [project.optional-dependencies]
 plots = ["matplotlib", "numpy"]
-dev = ["pytest"]
+server = ["fastapi", "uvicorn[standard]"]
+dev = ["pytest", "httpx"]
 
 [project.scripts]
 mahjong-advisor = "mahjong.advisor:main"

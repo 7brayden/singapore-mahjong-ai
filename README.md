@@ -71,6 +71,7 @@ src/mahjong/
 ├── session.py             # Multi-round sessions: dealer rotation, running scores
 ├── interactive.py         # Human-in-the-loop controller with redacted views
 ├── advisor.py             # Interactive tool — input your hand, get advice
+├── server/                # FastAPI backend: games, actions, hints, analysis, websocket
 └── agents/
     ├── random_agent.py    # Discards randomly. Never wins.
     ├── greedy_agent.py    # Minimises shanten. Wins a lot, deals in often.
@@ -152,6 +153,27 @@ while not game.game_over:
 
 This is the surface the upcoming web UI talks to. The agent attached to a human seat can still be consulted for hints ("what would the hybrid bot do here?") via `game.game.dispatch_to_agent(game.pending)`.
 
+## Web API
+
+A FastAPI backend wraps `InteractiveGame` for the browser UI:
+
+```bash
+docker compose up --build        # http://localhost:8000, docs at /docs
+# or without Docker:
+pip install -e ".[server]"
+uvicorn mahjong.server.app:app --reload
+```
+
+| Endpoint | Purpose |
+|---|---|
+| `POST /games` | create a game (`seed`, `human_seat`, `bots` — 4 of random/greedy/defensive/hybrid) |
+| `GET /games/{id}` | redacted view for the human seat |
+| `POST /games/{id}/action` | answer the pending decision (discard / claim / chow / kong) |
+| `GET /games/{id}/hint` | what the seat's own bot would do |
+| `GET /games/{id}/analysis` | learning stats: shanten, per-discard acceptance + danger breakdown, opponent threats |
+| `WS /games/{id}/ws` | view pushed on connect and after every action |
+| `GET /tiles` | tile id → name/suit/rank metadata |
+
 ## Benchmark results
 
 200 games per experiment, deterministic seeds.
@@ -212,7 +234,8 @@ python3 experiments/generate_plots.py     # result charts (needs matplotlib)
 ## Future work
 
 - Special hands: thirteen orphans, heaven/earth wins
-- Web UI: FastAPI backend + React frontend (in Docker) over the InteractiveGame API, with live stats (shanten, danger, opponent threat) so players learn while they play
+- React frontend over the web API, with the live stats sidebar (shanten, danger heat, opponent threat) so players learn while they play
+- LLM move explanations (`/explain`) grounded in the analysis endpoint
 - LLM-powered move explanations grounded in the engine's analysis
 - Learned danger model trained on simulation data
 - Lookahead: sample future draws, estimate discard value

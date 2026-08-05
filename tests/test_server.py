@@ -1,0 +1,108 @@
+"""API tests for the FastAPI backend."""
+
+from fastapi.testclient import TestClient
+
+from mahjong.server.app import app
+
+client = TestClient(app)
+
+
+def create(seed=5, bots=None, human_seat=0):
+    response = client.post("/games", json={
+        "seed": seed, "bots": bots, "human_seat": human_seat})
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def test_root_and_tiles():
+    root = client.get("/").json()
+    assert "hybrid" in root["bot_types"]
+
+    tiles = client.get("/tiles").json()
+    assert tiles["0"]["short"] == "1w"
+    assert tiles["33"]["name"] == "White Dragon"
+    assert tiles["42"]["suit"] == "animal"
+
+
+def test_create_and_view():
+    data = create()
+    view = data["view"]
+    # Human sits at seat 0 = dealer, so the first decision is theirs
+    assert view["pending"]["type"] == "discard"
+    assert len(view["hand"]) == 14
+
+    again = client.get(f"/games/{data['game_id']}").json()
+    assert again["hand"] == view["hand"]
+
+
+def test_full_game_via_hints():
+    data = create(seed=7, bots=["greedy"] * 4)
+    game_id = data["game_id"]
+    view = data["view"]
+    for _ in range(300):
+        if view["game_over"]:
+            break
+        suggestion = client.get(f"/games/{game_id}/hint").json()["suggestion"]
+        response = client.post(f"/games/{game_id}/action",
+                               json={"answer": suggestion})
+        assert response.status_code == 200, response.text
+        view = response.json()
+    assert view["game_over"]
+    assert sum(view["result"]["payments"]) == 0
+
+
+def test_invalid_actions_return_400():
+    data = create()
+    game_id = data["game_id"]
+    not_held = next(t for t in range(34) if t not in data["view"]["hand"])
+
+    assert client.post(f"/games/{game_id}/action",
+                       json={"answer": not_held}).status_code == 400
+    assert client.post(f"/games/{game_id}/action",
+                       json={"answer": True}).status_code == 400
+    # Game is untouched and still playable
+    assert client.get(f"/games/{game_id}").json()["pending"] is not None
+
+
+def test_unknown_game_is_404():
+    assert client.get("/games/nope").status_code == 404
+    assert client.post("/games/nope/action",
+                       json={"answer": 1}).status_code == 404
+    assert client.delete("/games/nope").status_code == 404
+
+
+def test_bad_create_requests_return_400():
+    assert client.post("/games", json={
+        "bots": ["hybrid", "hybrid", "alphazero", "greedy"]}).status_code == 400
+    assert client.post("/games", json={"human_seat": 7}).status_code == 400
+
+
+def test_analysis_payload():
+    data = create(seed=9)
+    analysis = client.get(f"/games/{data['game_id']}/analysis").json()
+    assert "shanten" in analysis
+    assert len(analysis["opponents"]) == 3
+    first = analysis["discards"][0]
+    assert set(first) >= {"tile", "shanten_after", "acceptance",
+                          "danger", "danger_components"}
+    assert set(first["danger_components"]) == {
+        "visibility", "discard_absence", "opponent_threat", "suit_safety"}
+
+
+def test_websocket_pushes_view_after_action():
+    data = create(seed=4, bots=["greedy"] * 4)
+    game_id = data["game_id"]
+    with client.websocket_connect(f"/games/{game_id}/ws") as ws:
+        first = ws.receive_json()
+        assert first["seat"] == 0
+
+        suggestion = client.get(f"/games/{game_id}/hint").json()["suggestion"]
+        client.post(f"/games/{game_id}/action", json={"answer": suggestion})
+        update = ws.receive_json()
+        assert update["turn"] >= first["turn"]
+
+
+def test_delete_game():
+    game_id = create()["game_id"]
+    assert client.delete(f"/games/{game_id}").status_code == 200
+    assert client.get(f"/games/{game_id}").status_code == 404
