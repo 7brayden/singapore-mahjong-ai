@@ -153,13 +153,26 @@ while not game.game_over:
 
 This is the surface the upcoming web UI talks to. The agent attached to a human seat can still be consulted for hints ("what would the hybrid bot do here?") via `game.game.dispatch_to_agent(game.pending)`.
 
-## Web API
-
-A FastAPI backend wraps `InteractiveGame` for the browser UI:
+## Playing in the browser
 
 ```bash
-docker compose up --build        # http://localhost:8000, docs at /docs
-# or without Docker:
+docker compose up --build
+# → app at http://localhost:5173, API at http://localhost:8000 (docs at /docs)
+```
+
+The React frontend (`frontend/`) implements the "Mahjong Trainer" design (see `design_handoff_mahjong_trainer/`): a felt table with the three bots, your clickable hand with per-tile danger heat, claim/kong prompts with an auto-pass countdown, and the coach sidebar — shanten meter, discard advisor with the four-signal danger breakdown, opponent threat gauges, and a hint button. The game-end screen shows the winner's revealed hand and the tai receipt with named scoring items. The Analysis toggle (or "no training wheels") hides all coaching for serious play.
+
+For frontend development:
+
+```bash
+cd frontend && npm install && npm run dev   # Vite dev server on :5173
+```
+
+## Web API
+
+The FastAPI backend wraps `InteractiveGame`:
+
+```bash
 pip install -e ".[server]"
 uvicorn mahjong.server.app:app --reload
 ```
@@ -234,7 +247,8 @@ python3 experiments/generate_plots.py     # result charts (needs matplotlib)
 ## Future work
 
 - Special hands: thirteen orphans, heaven/earth wins
-- React frontend over the web API, with the live stats sidebar (shanten, danger heat, opponent threat) so players learn while they play
+- Post-game review screen ("Review game with coach") over a hand event log
+- Multi-hand browser sessions backed by session.py (dealer rotation in the UI)
 - LLM move explanations (`/explain`) grounded in the analysis endpoint
 - LLM-powered move explanations grounded in the engine's analysis
 - Learned danger model trained on simulation data

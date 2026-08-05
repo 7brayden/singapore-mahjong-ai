@@ -177,6 +177,7 @@ class GameResult:
     dealt_in_by: Optional[int] = None  # who discarded the ron-winning tile
     winning_score: Optional[HandScore] = None  # tai breakdown of the winning hand
     payments: Optional[List[int]] = None  # chip deltas per player (win + instant bonuses)
+    win_tile: Optional[int] = None  # the tile that completed the winning hand
 
 
 # ── Game state ────────────────────────────────────────────────────────
@@ -461,7 +462,8 @@ class GameState:
                           is_kong_draw=is_kong_draw,
                           is_last_tile=self.tiles_remaining <= DEAD_WALL_SIZE)
         if score is not None and is_legal_win(score, self.score_config):
-            self._end_game(winner=p, win_type="tsumo", score=score)
+            self._end_game(winner=p, win_type="tsumo", score=score,
+                           win_tile=win_tile)
             return True
         return False  # complete but below minimum tai — play on
 
@@ -506,7 +508,8 @@ class GameState:
                     hand.remove_tile(tile_id)
                     self.hands[winner].add_tile(tile_id)
                     self._end_game(winner=winner, win_type="ron",
-                                   dealt_in_by=p, score=score)
+                                   dealt_in_by=p, score=score,
+                                   win_tile=tile_id)
                     return False
 
             hand.declare_kong(kind, tile_id)
@@ -604,7 +607,8 @@ class GameState:
                 ron_winner, score = ron_result
                 self.hands[ron_winner].add_tile(tile_id)
                 self._end_game(winner=ron_winner, win_type="ron",
-                               dealt_in_by=discarder, score=score)
+                               dealt_in_by=discarder, score=score,
+                               win_tile=tile_id)
                 return False
 
             claim = yield from self._check_pong_or_kong(discarder, tile_id)
@@ -633,7 +637,8 @@ class GameState:
 
     def _end_game(self, winner: Optional[int], win_type: Optional[str],
                   dealt_in_by: Optional[int] = None,
-                  score: Optional[HandScore] = None):
+                  score: Optional[HandScore] = None,
+                  win_tile: Optional[int] = None):
         """Record the game result, including scoring and chip payments."""
         self.game_over = True
 
@@ -657,6 +662,7 @@ class GameState:
             dealt_in_by=dealt_in_by,
             winning_score=score,
             payments=payments,
+            win_tile=win_tile,
         )
 
     # ── Main game loop ────────────────────────────────────────────────

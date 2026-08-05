@@ -4,4 +4,11 @@ services:
     container_name: mahjong-api
     ports:
       - "8000:8000"
-    # The React frontend service joins here in the next phase.
+
+  web:
+    build: ./frontend
+    container_name: mahjong-web
+    ports:
+      - "5173:80"
+    depends_on:
+      - api

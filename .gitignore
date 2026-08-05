@@ -8,5 +8,9 @@ build/
 .venv/
 venv/
 
+# Frontend
+node_modules/
+frontend/dist/
+
 # macOS
 .DS_Store

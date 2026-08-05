@@ -8,6 +8,8 @@ venv
 tests
 experiments
 results
+frontend
+design_handoff_mahjong_trainer
 .DS_Store
 Dockerfile
 docker-compose.yml

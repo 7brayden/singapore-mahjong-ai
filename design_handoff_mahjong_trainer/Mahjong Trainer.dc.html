@@ -1,0 +1,1029 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="" />
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=DM+Mono:wght@400;500&family=Newsreader:opsz,wght@6..72,400;6..72,500&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet" />
+<style>
+  html, body { margin: 0; padding: 0; background: #0b1216; }
+  * { box-sizing: border-box; }
+  a { color: #edb85a; text-decoration: none; }
+  a:hover { color: #f6cd82; }
+  @keyframes turnPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(217,154,43,.45); } 50% { box-shadow: 0 0 0 8px rgba(217,154,43,0); } }
+  @keyframes softGlow { 0%,100% { opacity: .55; } 50% { opacity: 1; } }
+  @keyframes tileIn { from { transform: translateY(-14px) scale(.94); opacity: 0; } to { transform: none; opacity: 1; } }
+  @keyframes thinkDot { 0%,80%,100% { opacity: .25; } 40% { opacity: 1; } }
+  @keyframes riseIn { from { transform: translateY(12px); opacity: 0; } to { transform: none; opacity: 1; } }
+</style>
+</helmet>
+
+<div style="min-width: 1380px; min-height: 900px; height: 100vh; display: flex; flex-direction: column; background: #0b1216; font-family: 'DM Sans', 'Noto Sans SC', sans-serif; color: #e9e3d5; -webkit-font-smoothing: antialiased;">
+
+  <div style="height: 56px; flex: none; display: flex; align-items: center; justify-content: space-between; padding: 0 22px; background: #0e171c; border-bottom: 1px solid rgba(255,255,255,.07);">
+    <div style="display: flex; align-items: center; gap: 16px;">
+      <div style="display: flex; align-items: center; gap: 9px;">
+        <div style="width: 22px; height: 28px; border-radius: 4px; background: linear-gradient(#fbf7ec, #e8dfc9); display: flex; align-items: center; justify-content: center; font-family: 'Noto Sans SC', sans-serif; font-size: 13px; font-weight: 700; color: #1d5c47;">中</div>
+        <div style="font-family: 'Newsreader', serif; font-size: 19px; letter-spacing: .01em;">Singapore Mahjong Trainer</div>
+      </div>
+      <div style="width: 1px; height: 22px; background: rgba(255,255,255,.1);"></div>
+      <div style="display: flex; align-items: center; gap: 10px; font-size: 12px; color: #8b9aa1;">
+        <span style="font-family: 'Noto Sans SC', sans-serif; color: #e9e3d5;">東</span>
+        <span>East round</span>
+        <span style="opacity: .4;">·</span>
+        <span>Hand 3 of 16</span>
+        <span style="opacity: .4;">·</span>
+        <span style="font-family: 'DM Mono', monospace;">seed 7A2K-91</span>
+      </div>
+    </div>
+    <div style="display: flex; align-items: center; gap: 14px;">
+      <div style="display: flex; align-items: center; gap: 4px; padding: 4px; border-radius: 999px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.07);">
+        <span style="font-size: 9px; letter-spacing: .13em; text-transform: uppercase; color: #6f8189; padding: 0 8px 0 6px;">States</span>
+        <sc-for list="{{ views }}" as="v" hint-placeholder-count="6">
+          <button onClick="{{ v.go }}" style="border: none; cursor: pointer; font-family: 'DM Sans', sans-serif; font-size: 12px; padding: 6px 11px; border-radius: 999px; background: {{ v.bg }}; color: {{ v.fg }};">{{ v.label }}</button>
+        </sc-for>
+      </div>
+      <button onClick="{{ toggleAnalysis }}" style="display: flex; align-items: center; gap: 9px; cursor: pointer; border: 1px solid rgba(255,255,255,.1); background: rgba(255,255,255,.04); border-radius: 999px; padding: 6px 12px 6px 8px; color: #cfd8da; font-family: 'DM Sans', sans-serif; font-size: 12px;">
+        <span style="width: 30px; height: 17px; border-radius: 999px; background: {{ switchTrack }}; position: relative; display: block;"><span style="position: absolute; top: 2px; left: {{ switchX }}; width: 13px; height: 13px; border-radius: 50%; background: #fbf7ec; transition: left .18s ease;"></span></span>
+        Analysis
+      </button>
+    </div>
+  </div>
+
+  <sc-if value="{{ isSetup }}" hint-placeholder-val="{{ false }}">
+    <div data-screen-label="Setup" style="flex: 1; display: flex; align-items: center; justify-content: center; padding: 40px; background: radial-gradient(1100px 620px at 50% 0%, #14262a 0%, #0b1216 70%);">
+      <div style="width: 880px; background: #111b20; border: 1px solid rgba(255,255,255,.08); border-radius: 20px; box-shadow: 0 30px 70px rgba(0,0,0,.45); overflow: hidden; animation: riseIn .35s ease both;">
+        <div style="padding: 26px 32px 20px; border-bottom: 1px solid rgba(255,255,255,.06); display: flex; align-items: flex-end; justify-content: space-between;">
+          <div>
+            <div style="font-size: 10px; letter-spacing: .16em; text-transform: uppercase; color: #d99a2b; margin-bottom: 8px;">New game</div>
+            <div style="font-family: 'Newsreader', serif; font-size: 30px; line-height: 1;">Set the table</div>
+            <div style="font-size: 13px; color: #8b9aa1; margin-top: 8px;">Singapore rules · 16 hands · flowers &amp; animals on</div>
+          </div>
+          <button onClick="{{ randomize }}" style="cursor: pointer; background: transparent; border: 1px solid rgba(255,255,255,.12); color: #a9b6ba; font-family: 'DM Sans', sans-serif; font-size: 12px; padding: 8px 14px; border-radius: 8px;">Randomize everything</button>
+        </div>
+
+        <div style="padding: 24px 32px; display: grid; grid-template-columns: 1fr 1fr; gap: 30px;">
+          <div style="display: flex; flex-direction: column; gap: 22px;">
+            <div>
+              <div style="font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: #7f8f96; margin-bottom: 10px;">Your seat</div>
+              <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;">
+                <sc-for list="{{ seats }}" as="s" hint-placeholder-count="4">
+                  <button onClick="{{ s.go }}" style="cursor: pointer; border: 1px solid {{ s.border }}; background: {{ s.bg }}; border-radius: 10px; padding: 12px 6px 10px; display: flex; flex-direction: column; align-items: center; gap: 5px; color: #e9e3d5; font-family: 'DM Sans', sans-serif;">
+                    <span style="font-family: 'Noto Sans SC', sans-serif; font-size: 20px; color: {{ s.fg }};">{{ s.char }}</span>
+                    <span style="font-size: 11px; color: #9aa8ae;">{{ s.name }}</span>
+                    <span style="font-size: 9px; letter-spacing: .1em; text-transform: uppercase; color: {{ s.tagFg }};">{{ s.tag }}</span>
+                  </button>
+                </sc-for>
+              </div>
+            </div>
+
+            <div>
+              <div style="font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: #7f8f96; margin-bottom: 10px;">Stakes</div>
+              <div style="display: flex; gap: 8px;">
+                <sc-for list="{{ stakes }}" as="k" hint-placeholder-count="4">
+                  <button onClick="{{ k.go }}" style="flex: 1; cursor: pointer; border: 1px solid {{ k.border }}; background: {{ k.bg }}; color: {{ k.fg }}; border-radius: 9px; padding: 10px 4px; font-family: 'DM Mono', monospace; font-size: 12px;">{{ k.label }}</button>
+                </sc-for>
+              </div>
+            </div>
+
+            <div>
+              <div style="font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: #7f8f96; margin-bottom: 10px;">Seed <span style="text-transform: none; letter-spacing: 0; color: #5f7178;">— optional, replay the same shuffle</span></div>
+              <div style="display: flex; align-items: center; gap: 8px; border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.03); border-radius: 9px; padding: 10px 12px;">
+                <span style="font-family: 'DM Mono', monospace; font-size: 13px; color: #cfd8da;">{{ seed }}</span>
+                <span style="width: 1px; height: 14px; background: rgba(255,255,255,.12);"></span>
+                <span style="font-size: 12px; color: #6f8189;">blank = random shuffle</span>
+              </div>
+            </div>
+
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-radius: 10px; background: rgba(217,154,43,.08); border: 1px solid rgba(217,154,43,.22);">
+              <div>
+                <div style="font-size: 13px; color: #f0dcb5;">Coach sidebar</div>
+                <div style="font-size: 11px; color: #a3947a;">Turn it off any time for no-training-wheels play</div>
+              </div>
+              <button onClick="{{ toggleAnalysis }}" style="cursor: pointer; border: none; background: {{ switchTrack }}; width: 38px; height: 21px; border-radius: 999px; position: relative;"><span style="position: absolute; top: 3px; left: {{ switchXBig }}; width: 15px; height: 15px; border-radius: 50%; background: #fbf7ec; transition: left .18s ease;"></span></button>
+            </div>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 14px;">
+            <div style="font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: #7f8f96;">Your opponents</div>
+            <sc-for list="{{ botRows }}" as="b" hint-placeholder-count="3">
+              <div style="border: 1px solid rgba(255,255,255,.08); background: rgba(255,255,255,.03); border-radius: 12px; padding: 12px 14px;">
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                  <span style="width: 24px; height: 24px; border-radius: 6px; background: rgba(255,255,255,.07); display: flex; align-items: center; justify-content: center; font-family: 'Noto Sans SC', sans-serif; font-size: 13px; color: #cfd8da;">{{ b.char }}</span>
+                  <span style="font-size: 13px;">{{ b.name }}</span>
+                  <span style="font-size: 11px; color: #6f8189;">{{ b.seat }}</span>
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;">
+                  <sc-for list="{{ b.options }}" as="o" hint-placeholder-count="4">
+                    <button onClick="{{ o.go }}" style="cursor: pointer; border: 1px solid {{ o.border }}; background: {{ o.bg }}; color: {{ o.fg }}; border-radius: 8px; padding: 8px 2px; font-family: 'DM Sans', sans-serif; font-size: 11px;">{{ o.label }}</button>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-for>
+            <div style="border-top: 1px solid rgba(255,255,255,.06); padding-top: 12px; display: flex; flex-direction: column; gap: 7px;">
+              <sc-for list="{{ personaLegend }}" as="p" hint-placeholder-count="4">
+                <div style="display: flex; gap: 8px; font-size: 11.5px; line-height: 1.45;">
+                  <span style="width: 74px; flex: none; color: #d99a2b;">{{ p.name }}</span>
+                  <span style="color: #8b9aa1;">{{ p.desc }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+
+        <div style="padding: 0 32px 30px;">
+          <button onClick="{{ deal }}" style="width: 100%; cursor: pointer; border: none; border-radius: 12px; padding: 18px; background: linear-gradient(#e8ac3d, #d0901f); color: #23180a; font-family: 'DM Sans', sans-serif; font-size: 17px; font-weight: 700; letter-spacing: .01em; box-shadow: 0 10px 26px rgba(217,154,43,.28);">Deal me in</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ isTable }}" hint-placeholder-val="{{ true }}">
+  <div data-screen-label="Table" style="flex: 1; min-height: 0; display: flex;">
+
+    <div style="flex: 1; min-width: 0; padding: 20px 20px 20px 22px; display: flex;">
+      <div style="flex: 1; position: relative; border-radius: 22px; padding: 18px; background: #123029; overflow: hidden;">
+        <div style="position: absolute; inset: 0; border-radius: 22px; background: radial-gradient(115% 85% at 50% 40%, #26604c 0%, #174034 55%, #102b25 100%); box-shadow: inset 0 0 0 1px rgba(255,255,255,.07), inset 0 60px 120px rgba(0,0,0,.25), 0 24px 60px rgba(0,0,0,.4);"></div>
+
+        <div style="position: relative; height: 100%; display: grid; grid-template-columns: 196px minmax(0, 1fr) 196px; grid-template-rows: 128px minmax(0, 1fr) auto; gap: 14px;">
+
+          <div style="grid-column: 2; grid-row: 1; display: flex; justify-content: center; align-items: flex-start;">
+            <div style="width: 340px; border-radius: 14px; padding: 12px 14px; background: {{ pNorth.panelBg }}; border: 1px solid {{ pNorth.panelBorder }};">
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 9px;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <span style="font-family: 'Noto Sans SC', sans-serif; font-size: 14px; color: #cfe6d8;">{{ pNorth.char }}</span>
+                  <span style="font-size: 13px; font-weight: 500;">{{ pNorth.name }}</span>
+                  <span style="font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; color: #9dc0ae; border: 1px solid rgba(255,255,255,.16); border-radius: 999px; padding: 2px 7px;">{{ pNorth.persona }}</span>
+                </div>
+                <span style="font-family: 'DM Mono', monospace; font-size: 12px; color: #ecd9ae;">{{ pNorth.chips }}</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 12px;">
+                <div style="display: flex; align-items: center; gap: 5px;">
+                  <div style="display: flex; gap: 2px;">
+                    <sc-for list="{{ backs4 }}" as="b" hint-placeholder-count="4">
+                      <span style="width: 9px; height: 22px; border-radius: 2px; background: linear-gradient(#2f6a56, #1f4a3c); box-shadow: inset 0 0 0 1px rgba(255,255,255,.12);"></span>
+                    </sc-for>
+                  </div>
+                  <span style="font-family: 'DM Mono', monospace; font-size: 11px; color: #a9c6b7;">{{ pNorth.hidden }}</span>
+                </div>
+                <div style="display: flex; gap: 8px;">
+                  <sc-for list="{{ pNorth.melds }}" as="m" hint-placeholder-count="1">
+                    <div style="display: flex; gap: 2px;">
+                      <sc-for list="{{ m.tiles }}" as="t" hint-placeholder-count="3">
+                        <span style="width: 20px; height: 27px; border-radius: 3px; background: linear-gradient(#fbf7ec, #eee6d2); display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1;">
+                          <span style="font-size: 11px; font-weight: 700; color: {{ t.topColor }}; font-family: 'DM Sans','Noto Sans SC',sans-serif;">{{ t.top }}</span>
+                          <span style="font-size: 7px; color: {{ t.subColor }}; font-family: 'Noto Sans SC', sans-serif;">{{ t.sub }}</span>
+                        </span>
+                      </sc-for>
+                    </div>
+                  </sc-for>
+                </div>
+                <div style="display: flex; gap: 4px; margin-left: auto;">
+                  <sc-for list="{{ pNorth.bonus }}" as="f" hint-placeholder-count="1">
+                    <span style="width: 19px; height: 23px; border-radius: 3px; background: {{ f.bg }}; border: 1px solid {{ f.border }}; display: flex; align-items: center; justify-content: center; font-family: 'Noto Sans SC', sans-serif; font-size: 10px; color: {{ f.fg }};">{{ f.char }}</span>
+                  </sc-for>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style="grid-column: 1; grid-row: 2; display: flex; align-items: center;">
+            <div style="width: 100%; border-radius: 14px; padding: 12px; background: {{ pWest.panelBg }}; border: 1px solid {{ pWest.panelBorder }};">
+              <div style="display: flex; align-items: center; gap: 7px; margin-bottom: 4px;">
+                <span style="font-family: 'Noto Sans SC', sans-serif; font-size: 14px; color: #cfe6d8;">{{ pWest.char }}</span>
+                <span style="font-size: 13px; font-weight: 500;">{{ pWest.name }}</span>
+              </div>
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+                <span style="font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; color: #9dc0ae; border: 1px solid rgba(255,255,255,.16); border-radius: 999px; padding: 2px 7px;">{{ pWest.persona }}</span>
+                <span style="font-family: 'DM Mono', monospace; font-size: 12px; color: #ecd9ae;">{{ pWest.chips }}</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 10px;">
+                <div style="display: flex; gap: 2px;">
+                  <sc-for list="{{ backs4 }}" as="b" hint-placeholder-count="4">
+                    <span style="width: 9px; height: 22px; border-radius: 2px; background: linear-gradient(#2f6a56, #1f4a3c); box-shadow: inset 0 0 0 1px rgba(255,255,255,.12);"></span>
+                  </sc-for>
+                </div>
+                <span style="font-family: 'DM Mono', monospace; font-size: 11px; color: #a9c6b7;">{{ pWest.hidden }}</span>
+              </div>
+              <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+                <sc-for list="{{ pWest.melds }}" as="m" hint-placeholder-count="1">
+                  <div style="display: flex; gap: 2px;">
+                    <sc-for list="{{ m.tiles }}" as="t" hint-placeholder-count="3">
+                      <span style="width: 20px; height: 27px; border-radius: 3px; background: linear-gradient(#fbf7ec, #eee6d2); display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1;">
+                        <span style="font-size: 11px; font-weight: 700; color: {{ t.topColor }}; font-family: 'DM Sans','Noto Sans SC',sans-serif;">{{ t.top }}</span>
+                        <span style="font-size: 7px; color: {{ t.subColor }}; font-family: 'Noto Sans SC', sans-serif;">{{ t.sub }}</span>
+                      </span>
+                    </sc-for>
+                  </div>
+                </sc-for>
+                <sc-for list="{{ pWest.bonus }}" as="f" hint-placeholder-count="1">
+                  <span style="width: 19px; height: 23px; border-radius: 3px; background: {{ f.bg }}; border: 1px solid {{ f.border }}; display: flex; align-items: center; justify-content: center; font-family: 'Noto Sans SC', sans-serif; font-size: 10px; color: {{ f.fg }};">{{ f.char }}</span>
+                </sc-for>
+              </div>
+              <div style="margin-top: 10px; font-size: 10.5px; color: #8fb0a0; line-height: 1.4;">{{ pWest.tell }}</div>
+            </div>
+          </div>
+
+          <div style="grid-column: 3; grid-row: 2; display: flex; align-items: center;">
+            <div style="width: 100%; border-radius: 14px; padding: 12px; background: {{ pEast.panelBg }}; border: 1px solid {{ pEast.panelBorder }};">
+              <div style="display: flex; align-items: center; gap: 7px; margin-bottom: 4px;">
+                <span style="font-family: 'Noto Sans SC', sans-serif; font-size: 14px; color: #f0d9a6;">{{ pEast.char }}</span>
+                <span style="font-size: 13px; font-weight: 500;">{{ pEast.name }}</span>
+                <span style="font-size: 9px; letter-spacing: .1em; text-transform: uppercase; color: #23180a; background: #e8ac3d; border-radius: 999px; padding: 2px 6px;">Dealer</span>
+              </div>
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+                <span style="font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; color: #9dc0ae; border: 1px solid rgba(255,255,255,.16); border-radius: 999px; padding: 2px 7px;">{{ pEast.persona }}</span>
+                <span style="font-family: 'DM Mono', monospace; font-size: 12px; color: #ecd9ae;">{{ pEast.chips }}</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 10px;">
+                <div style="display: flex; gap: 2px;">
+                  <sc-for list="{{ backs4 }}" as="b" hint-placeholder-count="4">
+                    <span style="width: 9px; height: 22px; border-radius: 2px; background: linear-gradient(#2f6a56, #1f4a3c); box-shadow: inset 0 0 0 1px rgba(255,255,255,.12);"></span>
+                  </sc-for>
+                </div>
+                <span style="font-family: 'DM Mono', monospace; font-size: 11px; color: #a9c6b7;">{{ pEast.hidden }}</span>
+              </div>
+              <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+                <sc-for list="{{ pEast.melds }}" as="m" hint-placeholder-count="2">
+                  <div style="display: flex; gap: 2px;">
+                    <sc-for list="{{ m.tiles }}" as="t" hint-placeholder-count="3">
+                      <span style="width: 20px; height: 27px; border-radius: 3px; background: linear-gradient(#fbf7ec, #eee6d2); display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1;">
+                        <span style="font-size: 11px; font-weight: 700; color: {{ t.topColor }}; font-family: 'DM Sans','Noto Sans SC',sans-serif;">{{ t.top }}</span>
+                        <span style="font-size: 7px; color: {{ t.subColor }}; font-family: 'Noto Sans SC', sans-serif;">{{ t.sub }}</span>
+                      </span>
+                    </sc-for>
+                  </div>
+                </sc-for>
+                <sc-for list="{{ pEast.bonus }}" as="f" hint-placeholder-count="2">
+                  <span style="width: 19px; height: 23px; border-radius: 3px; background: {{ f.bg }}; border: 1px solid {{ f.border }}; display: flex; align-items: center; justify-content: center; font-family: 'Noto Sans SC', sans-serif; font-size: 10px; color: {{ f.fg }};">{{ f.char }}</span>
+                </sc-for>
+              </div>
+              <div style="margin-top: 10px; font-size: 10.5px; color: #d8b478; line-height: 1.4;">{{ pEast.tell }}</div>
+            </div>
+          </div>
+
+          <div style="grid-column: 2; grid-row: 2; display: grid; grid-template-columns: 1fr 190px 1fr; grid-template-rows: 1fr auto 1fr; align-items: center; justify-items: center; gap: 10px;">
+            <div style="grid-column: 2; grid-row: 1; display: flex; flex-wrap: wrap; gap: 3px; justify-content: center; max-width: 190px;">
+              <sc-for list="{{ riverN }}" as="t" hint-placeholder-count="5">
+                <span style="width: 26px; height: 34px; border-radius: 4px; background: linear-gradient(#fbf7ec, #ece4cf); display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1; box-shadow: {{ t.ring }};">
+                  <span style="font-size: 13px; font-weight: 700; color: {{ t.topColor }}; font-family: 'DM Sans','Noto Sans SC',sans-serif;">{{ t.top }}</span>
+                  <span style="font-size: 8px; color: {{ t.subColor }}; font-family: 'Noto Sans SC', sans-serif;">{{ t.sub }}</span>
+                </span>
+              </sc-for>
+            </div>
+
+            <div style="grid-column: 1; grid-row: 2; display: flex; flex-wrap: wrap; gap: 3px; justify-content: flex-end; max-width: 150px;">
+              <sc-for list="{{ riverW }}" as="t" hint-placeholder-count="6">
+                <span style="width: 26px; height: 34px; border-radius: 4px; background: linear-gradient(#fbf7ec, #ece4cf); display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1; box-shadow: {{ t.ring }};">
+                  <span style="font-size: 13px; font-weight: 700; color: {{ t.topColor }}; font-family: 'DM Sans','Noto Sans SC',sans-serif;">{{ t.top }}</span>
+                  <span style="font-size: 8px; color: {{ t.subColor }}; font-family: 'Noto Sans SC', sans-serif;">{{ t.sub }}</span>
+                </span>
+              </sc-for>
+            </div>
+
+            <div style="grid-column: 2; grid-row: 2; width: 176px; border-radius: 14px; padding: 14px; background: rgba(8,20,17,.44); border: 1px solid rgba(255,255,255,.09); display: flex; flex-direction: column; align-items: center; gap: 8px;">
+              <div style="display: flex; align-items: baseline; gap: 6px;">
+                <span style="font-family: 'DM Mono', monospace; font-size: 30px; color: #f4efe1; line-height: 1;">{{ wall }}</span>
+                <span style="font-size: 11px; color: #9dc0ae;">tiles left</span>
+              </div>
+              <div style="width: 100%; height: 4px; border-radius: 2px; background: rgba(255,255,255,.12); overflow: hidden;"><span style="display: block; height: 100%; width: {{ wallPct }}; background: #6fae7f;"></span></div>
+              <div style="display: flex; align-items: center; gap: 8px; margin-top: 2px;">
+                <span style="width: 30px; height: 30px; border-radius: 8px; background: rgba(232,172,61,.16); border: 1px solid rgba(232,172,61,.4); display: flex; align-items: center; justify-content: center; font-family: 'Noto Sans SC', sans-serif; font-size: 15px; color: #f0d9a6;">東</span>
+                <div style="line-height: 1.3;">
+                  <div style="font-size: 11px; color: #e9e3d5;">East round</div>
+                  <div style="font-size: 10px; color: #8fb0a0;">Dealer: {{ pEast.name }}</div>
+                </div>
+              </div>
+              <div style="width: 100%; height: 1px; background: rgba(255,255,255,.1); margin: 2px 0;"></div>
+              <div style="display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; background: {{ turnBg }}; border: 1px solid {{ turnBorder }}; animation: {{ turnAnim }};">
+                <sc-if value="{{ isWaiting }}" hint-placeholder-val="{{ false }}">
+                  <span style="display: flex; gap: 3px;">
+                    <span style="width: 4px; height: 4px; border-radius: 50%; background: #cfe6d8; animation: thinkDot 1.2s infinite 0s;"></span>
+                    <span style="width: 4px; height: 4px; border-radius: 50%; background: #cfe6d8; animation: thinkDot 1.2s infinite .2s;"></span>
+                    <span style="width: 4px; height: 4px; border-radius: 50%; background: #cfe6d8; animation: thinkDot 1.2s infinite .4s;"></span>
+                  </span>
+                </sc-if>
+                <span style="font-size: 12px; font-weight: 500; color: {{ turnFg }};">{{ turnLabel }}</span>
+              </div>
+            </div>
+
+            <div style="grid-column: 3; grid-row: 2; display: flex; flex-wrap: wrap; gap: 3px; max-width: 150px;">
+              <sc-for list="{{ riverE }}" as="t" hint-placeholder-count="6">
+                <span style="width: 26px; height: 34px; border-radius: 4px; background: linear-gradient(#fbf7ec, #ece4cf); display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1; box-shadow: {{ t.ring }};">
+                  <span style="font-size: 13px; font-weight: 700; color: {{ t.topColor }}; font-family: 'DM Sans','Noto Sans SC',sans-serif;">{{ t.top }}</span>
+                  <span style="font-size: 8px; color: {{ t.subColor }}; font-family: 'Noto Sans SC', sans-serif;">{{ t.sub }}</span>
+                </span>
+              </sc-for>
+            </div>
+
+            <div style="grid-column: 2; grid-row: 3; display: flex; flex-wrap: wrap; gap: 3px; justify-content: center; max-width: 190px;">
+              <sc-for list="{{ riverS }}" as="t" hint-placeholder-count="5">
+                <span style="width: 26px; height: 34px; border-radius: 4px; background: linear-gradient(#fbf7ec, #ece4cf); display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1; box-shadow: {{ t.ring }};">
+                  <span style="font-size: 13px; font-weight: 700; color: {{ t.topColor }}; font-family: 'DM Sans','Noto Sans SC',sans-serif;">{{ t.top }}</span>
+                  <span style="font-size: 8px; color: {{ t.subColor }}; font-family: 'Noto Sans SC', sans-serif;">{{ t.sub }}</span>
+                </span>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="grid-column: 1 / span 3; grid-row: 3; display: flex; flex-direction: column; gap: 10px; align-items: center;">
+            <div style="width: 100%; display: flex; align-items: center; justify-content: space-between;">
+              <div style="display: flex; align-items: center; gap: 12px;">
+                <span style="font-family: 'Noto Sans SC', sans-serif; font-size: 15px; color: #f0d9a6;">南</span>
+                <span style="font-size: 13px; font-weight: 500;">You · South</span>
+                <span style="font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; color: #9dc0ae; border: 1px solid rgba(255,255,255,.16); border-radius: 999px; padding: 2px 7px;">Concealed</span>
+                <span style="font-family: 'DM Mono', monospace; font-size: 12px; color: #ecd9ae;">128 chips</span>
+                <span style="display: flex; gap: 4px;">
+                  <sc-for list="{{ myBonus }}" as="f" hint-placeholder-count="2">
+                    <span style="width: 19px; height: 23px; border-radius: 3px; background: {{ f.bg }}; border: 1px solid {{ f.border }}; display: flex; align-items: center; justify-content: center; font-family: 'Noto Sans SC', sans-serif; font-size: 10px; color: {{ f.fg }};">{{ f.char }}</span>
+                  </sc-for>
+                </span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 11px; color: #8fb0a0;">{{ handHint }}</span>
+                <button onClick="{{ toggleHint }}" style="cursor: pointer; display: flex; align-items: center; gap: 7px; border: 1px solid rgba(232,172,61,.45); background: rgba(232,172,61,.12); color: #f0d9a6; border-radius: 9px; padding: 8px 14px; font-family: 'DM Sans', sans-serif; font-size: 12.5px;">
+                  <span style="font-family: 'Noto Sans SC', sans-serif; font-size: 12px;">師</span> Hint
+                </button>
+              </div>
+            </div>
+
+            <div style="display: flex; align-items: flex-end; gap: 6px; opacity: {{ handOpacity }}; padding: 20px 0 12px;">
+              <sc-for list="{{ hand }}" as="t" hint-placeholder-count="13">
+                <button onClick="{{ t.go }}" style="position: relative; cursor: {{ t.cursor }}; border: none; padding: 0; background: transparent; transform: {{ t.tf }}; transition: transform .16s ease;">
+                  <sc-if value="{{ t.rec }}" hint-placeholder-val="{{ false }}">
+                    <span style="position: absolute; top: -15px; left: 50%; transform: translateX(-50%); font-size: 12px; color: #f0d9a6;">★</span>
+                  </sc-if>
+                  <span style="display: flex; flex-direction: column; align-items: center; justify-content: center; width: 54px; height: 78px; border-radius: 7px; background: linear-gradient(#fdfaf1, #efe8d5); box-shadow: {{ t.glow }};">
+                    <span style="font-size: 27px; font-weight: 700; line-height: 1; color: {{ t.topColor }}; font-family: 'DM Sans','Noto Sans SC',sans-serif;">{{ t.top }}</span>
+                    <span style="font-size: 14px; line-height: 1.4; color: {{ t.subColor }}; font-family: 'Noto Sans SC', sans-serif;">{{ t.sub }}</span>
+                    <span style="position: absolute; left: 8px; right: 8px; bottom: 7px; height: 4px; border-radius: 2px; background: {{ t.heatBg }};"></span>
+                  </span>
+                </button>
+              </sc-for>
+              <span style="width: 16px;"></span>
+              <sc-for list="{{ drawn }}" as="t" hint-placeholder-count="1">
+                <button onClick="{{ t.go }}" style="position: relative; cursor: {{ t.cursor }}; border: none; padding: 0; background: transparent; transform: {{ t.tf }}; animation: tileIn .22s ease both;">
+                  <span style="position: absolute; top: -15px; left: 50%; transform: translateX(-50%); font-size: 9px; letter-spacing: .1em; text-transform: uppercase; color: #9dc0ae; white-space: nowrap;">Drawn</span>
+                  <span style="display: flex; flex-direction: column; align-items: center; justify-content: center; width: 54px; height: 78px; border-radius: 7px; background: linear-gradient(#fdfaf1, #efe8d5); box-shadow: {{ t.glow }};">
+                    <span style="font-size: 27px; font-weight: 700; line-height: 1; color: {{ t.topColor }}; font-family: 'DM Sans','Noto Sans SC',sans-serif;">{{ t.top }}</span>
+                    <span style="font-size: 14px; line-height: 1.4; color: {{ t.subColor }}; font-family: 'Noto Sans SC', sans-serif;">{{ t.sub }}</span>
+                    <span style="position: absolute; left: 8px; right: 8px; bottom: 7px; height: 4px; border-radius: 2px; background: {{ t.heatBg }};"></span>
+                  </span>
+                </button>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+
+        <sc-if value="{{ showClaim }}" hint-placeholder-val="{{ false }}">
+          <div style="position: absolute; inset: 0; border-radius: 22px; background: rgba(6,14,13,.5); display: flex; align-items: flex-end; justify-content: center; padding-bottom: 200px;">
+            <div style="width: 620px; border-radius: 16px; background: #101b1f; border: 1px solid rgba(232,172,61,.3); box-shadow: 0 24px 60px rgba(0,0,0,.5); overflow: hidden; animation: riseIn .22s ease both;">
+              <div style="padding: 18px 22px; display: flex; align-items: center; gap: 16px; border-bottom: 1px solid rgba(255,255,255,.07);">
+                <span style="display: flex; flex-direction: column; align-items: center; justify-content: center; width: 54px; height: 74px; border-radius: 8px; background: linear-gradient(#fdfaf1, #efe8d5); box-shadow: 0 0 0 2px #e8ac3d, 0 10px 24px rgba(232,172,61,.3); animation: softGlow 1.8s ease-in-out infinite;">
+                  <span style="font-size: 27px; font-weight: 700; line-height: 1; color: #25333a; font-family: 'DM Sans', sans-serif;">5</span>
+                  <span style="font-size: 14px; color: #2f6fa8; font-family: 'Noto Sans SC', sans-serif;">筒</span>
+                </span>
+                <div style="flex: 1;">
+                  <div style="font-family: 'Newsreader', serif; font-size: 22px; line-height: 1.2;">Pong this 5 Tong?</div>
+                  <div style="font-size: 12px; color: #8fb0a0; margin-top: 5px;">Auntie Lim (East) discarded it · you hold two 5 筒</div>
+                </div>
+                <div style="font-family: 'DM Mono', monospace; font-size: 11px; color: #6f8189;">auto-pass in 6s</div>
+              </div>
+
+              <div style="padding: 16px 22px; display: flex; flex-direction: column; gap: 14px;">
+                <div style="display: flex; gap: 10px;">
+                  <button style="flex: 1; cursor: pointer; border: none; border-radius: 10px; padding: 14px; background: linear-gradient(#e8ac3d, #d0901f); color: #23180a; font-family: 'DM Sans', sans-serif; font-size: 15px; font-weight: 700;">Pong <span style="font-family: 'Noto Sans SC', sans-serif; font-weight: 500;">碰</span></button>
+                  <button style="flex: 1; cursor: pointer; border: 1px solid rgba(255,255,255,.14); border-radius: 10px; padding: 14px; background: rgba(255,255,255,.05); color: #6f8189; font-family: 'DM Sans', sans-serif; font-size: 15px;">Kong <span style="font-family: 'Noto Sans SC', sans-serif;">杠</span></button>
+                  <button onClick="{{ pass }}" style="flex: 1; cursor: pointer; border: 1px solid rgba(255,255,255,.14); border-radius: 10px; padding: 14px; background: rgba(255,255,255,.05); color: #cfd8da; font-family: 'DM Sans', sans-serif; font-size: 15px;">Pass</button>
+                </div>
+
+                <div>
+                  <div style="font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: #7f8f96; margin-bottom: 8px;">Or chow <span style="font-family: 'Noto Sans SC', sans-serif; text-transform: none; letter-spacing: 0;">吃</span> — pick a combination</div>
+                  <div style="display: flex; gap: 8px;">
+                    <sc-for list="{{ chows }}" as="c" hint-placeholder-count="3">
+                      <button onClick="{{ c.go }}" style="cursor: pointer; display: flex; align-items: center; gap: 6px; border: 1px solid {{ c.border }}; background: {{ c.bg }}; border-radius: 10px; padding: 9px 12px;">
+                        <sc-for list="{{ c.tiles }}" as="t" hint-placeholder-count="3">
+                          <span style="display: flex; flex-direction: column; align-items: center; justify-content: center; width: 26px; height: 34px; border-radius: 4px; background: {{ t.faceBg }}; line-height: 1;">
+                            <span style="font-size: 13px; font-weight: 700; color: {{ t.topColor }}; font-family: 'DM Sans','Noto Sans SC',sans-serif;">{{ t.top }}</span>
+                            <span style="font-size: 8px; color: {{ t.subColor }}; font-family: 'Noto Sans SC', sans-serif;">{{ t.sub }}</span>
+                          </span>
+                        </sc-for>
+                      </button>
+                    </sc-for>
+                  </div>
+                </div>
+
+                <div style="display: flex; gap: 11px; padding: 13px 15px; border-radius: 11px; background: rgba(232,172,61,.09); border: 1px solid rgba(232,172,61,.22);">
+                  <span style="flex: none; width: 24px; height: 24px; border-radius: 6px; background: #e8ac3d; color: #23180a; display: flex; align-items: center; justify-content: center; font-family: 'Noto Sans SC', sans-serif; font-size: 12px; font-weight: 700;">師</span>
+                  <div style="font-size: 12.5px; line-height: 1.55; color: #e3cfa5;">
+                    <strong style="color: #f0d9a6; font-weight: 500;">Pass.</strong> Ponging 5 筒 breaks your 5-6-7 run and leaves you 2 away instead of 1. Your hand is already concealed and quiet — keep it that way and stay flexible.
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ showKong }}" hint-placeholder-val="{{ false }}">
+          <div style="position: absolute; left: 0; right: 0; bottom: 200px; display: flex; justify-content: center;">
+            <div style="display: flex; align-items: center; gap: 16px; padding: 12px 14px 12px 16px; border-radius: 14px; background: #101b1f; border: 1px solid rgba(232,172,61,.3); box-shadow: 0 20px 46px rgba(0,0,0,.45); animation: riseIn .22s ease both;">
+              <div style="display: flex; gap: 3px;">
+                <sc-for list="{{ kongTiles }}" as="t" hint-placeholder-count="4">
+                  <span style="display: flex; flex-direction: column; align-items: center; justify-content: center; width: 30px; height: 40px; border-radius: 5px; background: linear-gradient(#fdfaf1, #efe8d5); line-height: 1; box-shadow: {{ t.ring }};">
+                    <span style="font-size: 15px; font-weight: 700; color: {{ t.topColor }}; font-family: 'DM Sans','Noto Sans SC',sans-serif;">{{ t.top }}</span>
+                    <span style="font-size: 8px; color: {{ t.subColor }}; font-family: 'Noto Sans SC', sans-serif;">{{ t.sub }}</span>
+                  </span>
+                </sc-for>
+              </div>
+              <div style="line-height: 1.4;">
+                <div style="font-size: 15px;">You drew the fourth <span style="font-family: 'Noto Sans SC', sans-serif;">東</span> — declare Kong?</div>
+                <div style="font-size: 11.5px; color: #8fb0a0;">Coach: yes — East wind is your seat pair, and the replacement draw is free value.</div>
+              </div>
+              <div style="display: flex; gap: 8px; margin-left: 8px;">
+                <button style="cursor: pointer; border: none; border-radius: 9px; padding: 11px 18px; background: linear-gradient(#e8ac3d, #d0901f); color: #23180a; font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 700;">Declare Kong</button>
+                <button onClick="{{ pass }}" style="cursor: pointer; border: 1px solid rgba(255,255,255,.14); border-radius: 9px; padding: 11px 16px; background: rgba(255,255,255,.05); color: #cfd8da; font-family: 'DM Sans', sans-serif; font-size: 14px;">Not yet</button>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+      </div>
+    </div>
+
+    <sc-if value="{{ analysis }}" hint-placeholder-val="{{ true }}">
+      <div data-screen-label="Analysis sidebar" style="width: 404px; flex: none; background: #0f181d; border-left: 1px solid rgba(255,255,255,.07); overflow-y: auto;">
+        <div style="padding: 16px 22px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,.06);">
+          <div style="display: flex; align-items: center; gap: 9px;">
+            <span style="width: 22px; height: 22px; border-radius: 6px; background: #e8ac3d; color: #23180a; display: flex; align-items: center; justify-content: center; font-family: 'Noto Sans SC', sans-serif; font-size: 11px; font-weight: 700;">師</span>
+            <span style="font-family: 'Newsreader', serif; font-size: 17px;">Coach</span>
+          </div>
+          <button onClick="{{ toggleAnalysis }}" style="cursor: pointer; background: transparent; border: none; color: #6f8189; font-family: 'DM Sans', sans-serif; font-size: 11.5px;">Hide · no training wheels</button>
+        </div>
+
+        <div style="padding: 20px 22px; border-bottom: 1px solid rgba(255,255,255,.06);">
+          <div style="font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: #7f8f96; margin-bottom: 12px;">Hand progress</div>
+          <div style="display: flex; align-items: baseline; gap: 9px;">
+            <span style="font-family: 'Newsreader', serif; font-size: 27px; line-height: 1; color: {{ shantenFg }};">{{ shantenText }}</span>
+            <sc-if value="{{ isTenpai }}" hint-placeholder-val="{{ false }}">
+              <span style="font-family: 'Noto Sans SC', sans-serif; font-size: 13px; color: #6fae7f;">听牌</span>
+            </sc-if>
+          </div>
+          <div style="font-size: 12px; color: #8b9aa1; margin-top: 7px; line-height: 1.5;">{{ shantenSub }}</div>
+          <div style="display: flex; gap: 5px; margin-top: 14px;">
+            <sc-for list="{{ segs }}" as="s" hint-placeholder-count="4">
+              <div style="flex: 1;">
+                <div style="height: 7px; border-radius: 4px; background: {{ s.bg }}; box-shadow: {{ s.shadow }};"></div>
+                <div style="font-size: 9.5px; margin-top: 6px; color: {{ s.fg }}; text-align: center;">{{ s.label }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <sc-if value="{{ isTenpai }}" hint-placeholder-val="{{ false }}">
+            <div style="margin-top: 16px; padding: 13px 14px; border-radius: 11px; background: rgba(111,174,127,.1); border: 1px solid rgba(111,174,127,.28);">
+              <div style="font-size: 11.5px; color: #a6d3b2; margin-bottom: 9px;">Waiting on — {{ liveText }}</div>
+              <div style="display: flex; gap: 6px;">
+                <sc-for list="{{ waits }}" as="t" hint-placeholder-count="2">
+                  <span style="display: flex; flex-direction: column; align-items: center; justify-content: center; width: 34px; height: 44px; border-radius: 5px; background: linear-gradient(#fdfaf1, #efe8d5); line-height: 1;">
+                    <span style="font-size: 17px; font-weight: 700; color: {{ t.topColor }}; font-family: 'DM Sans','Noto Sans SC',sans-serif;">{{ t.top }}</span>
+                    <span style="font-size: 9px; color: {{ t.subColor }}; font-family: 'Noto Sans SC', sans-serif;">{{ t.sub }}</span>
+                  </span>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
+        </div>
+
+        <div style="padding: 20px 22px; border-bottom: 1px solid rgba(255,255,255,.06);">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+            <span style="font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: #7f8f96;">Discard advisor</span>
+            <span style="font-size: 10.5px; color: {{ advisorNoteFg }};">{{ advisorNote }}</span>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <sc-for list="{{ candidates }}" as="c" hint-placeholder-count="3">
+              <div style="border: 1px solid {{ c.border }}; background: {{ c.bg }}; border-radius: 12px; overflow: hidden;">
+                <button onClick="{{ c.go }}" style="width: 100%; cursor: pointer; border: none; background: transparent; padding: 12px 14px; display: flex; align-items: center; gap: 12px; text-align: left; font-family: 'DM Sans', sans-serif;">
+                  <span style="position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; width: 38px; height: 50px; flex: none; border-radius: 6px; background: linear-gradient(#fdfaf1, #efe8d5); line-height: 1;">
+                    <span style="font-size: 19px; font-weight: 700; color: {{ c.tile.topColor }}; font-family: 'DM Sans','Noto Sans SC',sans-serif;">{{ c.tile.top }}</span>
+                    <span style="font-size: 10px; color: {{ c.tile.subColor }}; font-family: 'Noto Sans SC', sans-serif;">{{ c.tile.sub }}</span>
+                    <span style="position: absolute; left: 6px; right: 6px; bottom: 5px; height: 3px; border-radius: 2px; background: {{ c.heatBg }};"></span>
+                  </span>
+                  <span style="flex: 1;">
+                    <span style="display: flex; align-items: center; gap: 7px;">
+                      <span style="font-size: 13.5px; color: #e9e3d5;">{{ c.title }}</span>
+                      <sc-if value="{{ c.rec }}" hint-placeholder-val="{{ false }}">
+                        <span style="font-size: 9px; letter-spacing: .1em; text-transform: uppercase; color: #23180a; background: #e8ac3d; border-radius: 999px; padding: 2px 7px;">★ Best</span>
+                      </sc-if>
+                    </span>
+                    <span style="display: block; font-size: 11.5px; color: #8b9aa1; margin-top: 4px;">{{ c.acceptText }}</span>
+                  </span>
+                  <span style="flex: none; text-align: right;">
+                    <span style="display: block; font-family: 'DM Mono', monospace; font-size: 13px; color: {{ c.dangerFg }};">{{ c.dangerPct }}</span>
+                    <span style="display: block; font-size: 9.5px; color: #6f8189; margin-top: 2px;">danger</span>
+                  </span>
+                </button>
+                <sc-if value="{{ c.open }}" hint-placeholder-val="{{ true }}">
+                  <div style="padding: 0 14px 14px; display: flex; flex-direction: column; gap: 9px;">
+                    <div style="font-size: 11.5px; line-height: 1.5; color: #a4b1b6; padding: 10px 12px; border-radius: 9px; background: rgba(255,255,255,.04);">{{ c.note }}</div>
+                    <sc-for list="{{ c.bars }}" as="b" hint-placeholder-count="4">
+                      <div style="display: flex; align-items: center; gap: 10px;">
+                        <span style="width: 108px; flex: none; font-size: 11px; color: #8b9aa1;">{{ b.label }}</span>
+                        <span style="flex: 1; height: 6px; border-radius: 3px; background: rgba(255,255,255,.07); overflow: hidden;"><span style="display: block; height: 100%; width: {{ b.pct }}; background: {{ b.color }};"></span></span>
+                        <span style="width: 30px; flex: none; text-align: right; font-family: 'DM Mono', monospace; font-size: 10.5px; color: #7f8f96;">{{ b.pct }}</span>
+                      </div>
+                    </sc-for>
+                  </div>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="padding: 20px 22px; border-bottom: 1px solid rgba(255,255,255,.06);">
+          <div style="font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: #7f8f96; margin-bottom: 14px;">Opponent threat</div>
+          <div style="display: flex; flex-direction: column; gap: 16px;">
+            <sc-for list="{{ threats }}" as="o" hint-placeholder-count="3">
+              <div>
+                <div style="display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 7px;">
+                  <span style="display: flex; align-items: center; gap: 7px;">
+                    <span style="font-family: 'Noto Sans SC', sans-serif; font-size: 12px; color: #9dc0ae;">{{ o.char }}</span>
+                    <span style="font-size: 13px; color: #e9e3d5;">{{ o.name }}</span>
+                    <span style="font-size: 10px; color: #6f8189;">{{ o.persona }}</span>
+                  </span>
+                  <span style="font-family: 'DM Mono', monospace; font-size: 13px; color: {{ o.color }};">{{ o.pct }}</span>
+                </div>
+                <div style="height: 7px; border-radius: 4px; background: rgba(255,255,255,.07); overflow: hidden;"><span style="display: block; height: 100%; width: {{ o.pct }}; background: {{ o.color }};"></span></div>
+                <div style="display: flex; align-items: flex-end; gap: 10px; margin-top: 9px;">
+                  <div style="display: flex; gap: 8px;">
+                    <sc-for list="{{ o.suits }}" as="s" hint-placeholder-count="4">
+                      <div style="display: flex; flex-direction: column; align-items: center; gap: 4px;">
+                        <span style="width: 22px; height: 4px; border-radius: 2px; background: rgba(255,255,255,.08); overflow: hidden; display: block;"><span style="display: block; height: 100%; width: {{ s.pct }}; background: {{ s.color }};"></span></span>
+                        <span style="font-family: 'Noto Sans SC', sans-serif; font-size: 10px; color: #7f8f96;">{{ s.char }}</span>
+                      </div>
+                    </sc-for>
+                  </div>
+                  <span style="font-size: 11px; color: {{ o.color }}; line-height: 1.4; flex: 1;">{{ o.tell }}</span>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="padding: 20px 22px 28px;">
+          <button onClick="{{ toggleHint }}" style="width: 100%; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 9px; border: 1px solid rgba(232,172,61,.45); background: rgba(232,172,61,.12); color: #f0d9a6; border-radius: 11px; padding: 14px; font-family: 'DM Sans', sans-serif; font-size: 14px;">
+            <span style="font-family: 'Noto Sans SC', sans-serif;">師</span> {{ hintBtnLabel }}
+          </button>
+          <sc-if value="{{ hintOpen }}" hint-placeholder-val="{{ true }}">
+            <div style="margin-top: 12px; border-radius: 12px; background: rgba(232,172,61,.09); border: 1px solid rgba(232,172,61,.24); padding: 15px 16px; animation: riseIn .2s ease both;">
+              <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 9px;">
+                <span style="width: 20px; height: 20px; border-radius: 5px; background: #e8ac3d; color: #23180a; display: flex; align-items: center; justify-content: center; font-family: 'Noto Sans SC', sans-serif; font-size: 10px; font-weight: 700;">師</span>
+                <span style="font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: #d99a2b;">What I would play</span>
+              </div>
+              <div style="font-size: 13px; line-height: 1.6; color: #e3cfa5;">{{ hintText }}</div>
+              <div style="margin-top: 11px; font-size: 11px; color: #a3947a;">Simulated 4,000 hands · this line wins 1.7× more often than ponging.</div>
+            </div>
+          </sc-if>
+        </div>
+      </div>
+    </sc-if>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{ showEnd }}" hint-placeholder-val="{{ false }}">
+    <div data-screen-label="Game end" style="position: fixed; inset: 0; background: rgba(7,13,16,.78); backdrop-filter: blur(6px); display: flex; align-items: center; justify-content: center; padding: 40px; z-index: 50;">
+      <div style="width: 760px; max-height: 100%; overflow-y: auto; border-radius: 20px; background: #111b20; border: 1px solid rgba(255,255,255,.09); box-shadow: 0 40px 90px rgba(0,0,0,.55); animation: riseIn .3s ease both;">
+        <div style="padding: 28px 32px 24px; background: linear-gradient(180deg, rgba(232,172,61,.14), rgba(232,172,61,0)); border-bottom: 1px solid rgba(255,255,255,.07);">
+          <div style="display: flex; align-items: flex-start; justify-content: space-between;">
+            <div>
+              <div style="font-size: 10px; letter-spacing: .16em; text-transform: uppercase; color: #d99a2b; margin-bottom: 9px;">Hand 3 · won by you</div>
+              <div style="font-family: 'Newsreader', serif; font-size: 34px; line-height: 1;">You win — self-draw</div>
+              <div style="font-size: 13px; color: #8b9aa1; margin-top: 9px;">Drew <span style="color: #e9e3d5;">8 筒</span> from the wall on turn 14 · <span style="font-family: 'Noto Sans SC', sans-serif; color: #e9e3d5;">自摸</span> pays from all three</div>
+            </div>
+            <div style="text-align: right;">
+              <div style="font-family: 'DM Mono', monospace; font-size: 38px; line-height: 1; color: #f0d9a6;">4 tai</div>
+              <div style="font-size: 12px; color: #8b9aa1; margin-top: 6px;">8 chips per player</div>
+            </div>
+          </div>
+          <div style="display: flex; gap: 4px; margin-top: 22px;">
+            <sc-for list="{{ winHand }}" as="t" hint-placeholder-count="14">
+              <span style="display: flex; flex-direction: column; align-items: center; justify-content: center; width: 40px; height: 54px; border-radius: 6px; background: linear-gradient(#fdfaf1, #efe8d5); line-height: 1; box-shadow: {{ t.ring }};">
+                <span style="font-size: 20px; font-weight: 700; color: {{ t.topColor }}; font-family: 'DM Sans','Noto Sans SC',sans-serif;">{{ t.top }}</span>
+                <span style="font-size: 10px; color: {{ t.subColor }}; font-family: 'Noto Sans SC', sans-serif;">{{ t.sub }}</span>
+              </span>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="padding: 24px 32px; display: grid; grid-template-columns: 1fr 260px; gap: 30px;">
+          <div>
+            <div style="font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: #7f8f96; margin-bottom: 14px;">Scoring</div>
+            <div style="display: flex; flex-direction: column;">
+              <sc-for list="{{ receipt }}" as="r" hint-placeholder-count="3">
+                <div style="display: flex; align-items: baseline; gap: 10px; padding: 11px 0; border-bottom: 1px dashed rgba(255,255,255,.1);">
+                  <span style="font-size: 14px; color: #e9e3d5;">{{ r.en }}</span>
+                  <span style="font-family: 'Noto Sans SC', sans-serif; font-size: 13px; color: #9aa8ae;">{{ r.zh }}</span>
+                  <span style="flex: 1;"></span>
+                  <span style="font-family: 'DM Mono', monospace; font-size: 14px; color: #f0d9a6;">{{ r.tai }}</span>
+                </div>
+              </sc-for>
+              <div style="display: flex; align-items: baseline; gap: 10px; padding: 14px 0 0;">
+                <span style="font-size: 14px; font-weight: 500;">Total</span>
+                <span style="flex: 1;"></span>
+                <span style="font-family: 'DM Mono', monospace; font-size: 18px; color: #f0d9a6;">4 tai → 8 chips</span>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div style="font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: #7f8f96; margin-bottom: 14px;">Chip payments</div>
+            <div style="display: flex; flex-direction: column; gap: 9px;">
+              <sc-for list="{{ payments }}" as="p" hint-placeholder-count="4">
+                <div style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; background: {{ p.bg }}; border: 1px solid {{ p.border }};">
+                  <span style="font-family: 'Noto Sans SC', sans-serif; font-size: 12px; color: #9dc0ae;">{{ p.char }}</span>
+                  <span style="flex: 1; font-size: 13px; color: #e9e3d5;">{{ p.name }}</span>
+                  <span style="font-family: 'DM Mono', monospace; font-size: 14px; color: {{ p.fg }};">{{ p.delta }}</span>
+                  <span style="font-family: 'DM Mono', monospace; font-size: 11px; color: #6f8189;">{{ p.total }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+
+        <div style="padding: 4px 32px 30px; display: flex; gap: 12px; align-items: center;">
+          <button onClick="{{ nextHand }}" style="flex: 1; cursor: pointer; border: none; border-radius: 12px; padding: 16px; background: linear-gradient(#e8ac3d, #d0901f); color: #23180a; font-family: 'DM Sans', sans-serif; font-size: 16px; font-weight: 700;">Next hand</button>
+          <button style="flex: 1; cursor: pointer; border: 1px solid rgba(255,255,255,.16); border-radius: 12px; padding: 16px; background: rgba(255,255,255,.05); color: #e9e3d5; font-family: 'DM Sans', sans-serif; font-size: 16px;">Review game with coach</button>
+          <button onClick="{{ toSetup }}" style="cursor: pointer; border: none; background: transparent; color: #6f8189; font-family: 'DM Sans', sans-serif; font-size: 12.5px; padding: 10px;">End session</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;startView&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;your-turn&quot;,&quot;claim&quot;,&quot;kong&quot;,&quot;waiting&quot;,&quot;end&quot;,&quot;setup&quot;],&quot;default&quot;:&quot;your-turn&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Demo&quot;},&quot;showAnalysis&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Coach&quot;},&quot;tileHeat&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Coach&quot;}}">
+const SUIT = { w: { sub: '萬', color: '#b4483c' }, t: { sub: '筒', color: '#2f6fa8' }, s: { sub: '索', color: '#2f7d52' } };
+const HONMAP = {
+  E: { top: '東', sub: 'E', topColor: '#25333a' },
+  S: { top: '南', sub: 'S', topColor: '#25333a' },
+  W: { top: '西', sub: 'W', topColor: '#25333a' },
+  N: { top: '北', sub: 'N', topColor: '#25333a' },
+  C: { top: '中', sub: 'RED', topColor: '#b4483c' },
+  F: { top: '發', sub: 'GRN', topColor: '#2f7d52' },
+  B: { top: '白', sub: 'WHT', topColor: '#5b7386' }
+};
+
+function tile(code) {
+  if (HONMAP[code]) {
+    const h = HONMAP[code];
+    return { code, top: h.top, sub: h.sub, topColor: h.topColor, subColor: '#8d949a' };
+  }
+  const n = code[0], s = SUIT[code[1]];
+  return { code, top: n, sub: s.sub, topColor: '#25333a', subColor: s.color };
+}
+function tiles(list) { return list.map(tile); }
+
+function heat(v) {
+  const stops = [[0, 111, 174, 127], [0.5, 214, 172, 71], [1, 198, 86, 75]];
+  let a = stops[0], b = stops[1];
+  if (v > 0.5) { a = stops[1]; b = stops[2]; }
+  const f = (v - a[0]) / (b[0] - a[0]);
+  const c = [1, 2, 3].map(i => Math.round(a[i] + (b[i] - a[i]) * f));
+  return 'rgb(' + c.join(',') + ')';
+}
+const pct = v => Math.round(v * 100) + '%';
+
+const HAND = [['2w', .12], ['3w', .1], ['4w', .14], ['5t', .3], ['5t', .32], ['6t', .34], ['7t', .42], ['3s', .22], ['4s', .2], ['5s', .26], ['E', .55], ['E', .55], ['B', .18]];
+
+const SCRIPT = [
+  {
+    drawn: ['9w', .28], shanten: 1,
+    sub: 'Three runs, an East pair and one floater. One good draw from ready.',
+    note: '17 tiles improve you',
+    candidates: [
+      { code: 'B', rec: true, title: 'Discard 白 White Dragon', accept: '17 tiles improve your hand', danger: .18, note: 'Lone dragon with two copies already in the river — nobody can pong it, and it will never join a run. Cheapest tile you own.', bars: [['Visibility', .2], ['Discard pattern', .12], ['Opponent threat', .3], ['Suit safety', .1]] },
+      { code: '9w', title: 'Discard 9 萬', accept: '14 tiles improve your hand', danger: .3, note: 'Also fine, but 9 萬 is your only link to a 789 萬 run if you draw 8 萬. Hold one more turn.', bars: [['Visibility', .35], ['Discard pattern', .28], ['Opponent threat', .4], ['Suit safety', .2]] },
+      { code: '5t', title: 'Discard 5 筒', accept: '9 tiles improve your hand', danger: .66, note: 'Breaks your best block and feeds Auntie Lim, who has ponged 筒 twice. Avoid.', bars: [['Visibility', .5], ['Discard pattern', .6], ['Opponent threat', .85], ['Suit safety', .7]] }
+    ]
+  },
+  {
+    drawn: ['E', .3], shanten: 0,
+    sub: 'Ready hand. Third East completed your fourth set.',
+    note: '5 winning tiles live',
+    waits: ['5t', '8t'], live: '5 of 8 still live',
+    candidates: [
+      { code: '9w', rec: true, title: 'Discard 9 萬', accept: 'Keeps a two-sided wait', danger: .26, note: 'Terminal, one already discarded, and it is the only tile that does not shrink your wait. Push it.', bars: [['Visibility', .3], ['Discard pattern', .2], ['Opponent threat', .35], ['Suit safety', .18]] },
+      { code: '3s', title: 'Discard 3 索', accept: 'Narrows to a single wait', danger: .34, note: 'Safe-ish but drops you to a 3-tile wait. Not worth it while 9 萬 is available.', bars: [['Visibility', .4], ['Discard pattern', .3], ['Opponent threat', .38], ['Suit safety', .3]] },
+      { code: '7t', title: 'Discard 7 筒', accept: 'Breaks the ready shape', danger: .72, note: 'This is your winning block. Do not touch it.', bars: [['Visibility', .55], ['Discard pattern', .62], ['Opponent threat', .88], ['Suit safety', .75]] }
+    ]
+  },
+  {
+    drawn: ['1w', .16], shanten: 1,
+    sub: 'You folded off the ready hand — rebuilding safely while East pushes.',
+    note: '12 tiles improve you',
+    candidates: [
+      { code: '1w', rec: true, title: 'Discard 1 萬', accept: 'Fold — safest tile in hand', danger: .12, note: 'Auntie Lim discarded 1 萬 herself, so she cannot win on it. Free turn.', bars: [['Visibility', .15], ['Discard pattern', .08], ['Opponent threat', .2], ['Suit safety', .1]] },
+      { code: 'E', title: 'Discard 東 East', accept: '12 tiles improve your hand', danger: .48, note: 'Your seat wind is worth a tai but East bot is collecting winds. Middling risk.', bars: [['Visibility', .45], ['Discard pattern', .4], ['Opponent threat', .6], ['Suit safety', .4]] },
+      { code: '6t', title: 'Discard 6 筒', accept: '8 tiles improve your hand', danger: .7, note: 'Middle 筒 against a 筒 collector is the worst tile on the board right now.', bars: [['Visibility', .6], ['Discard pattern', .65], ['Opponent threat', .9], ['Suit safety', .8]] }
+    ]
+  }
+];
+
+const BONUS = {
+  flower: { bg: 'rgba(251,247,236,.9)', border: 'rgba(255,255,255,.3)', fg: '#2f7d52' },
+  animal: { bg: 'rgba(232,172,61,.9)', border: 'rgba(255,255,255,.35)', fg: '#3a2708' }
+};
+const bonus = (char, kind) => Object.assign({ char }, BONUS[kind]);
+
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = {
+      view: props.startView || 'your-turn',
+      analysis: props.showAnalysis !== false,
+      heatOn: props.tileHeat !== false,
+      hintOpen: false,
+      expanded: null,
+      turn: 0,
+      hand: HAND.slice(),
+      drawn: SCRIPT[0].drawn,
+      riverS: ['1w', '9s', 'N', '3t', '7s'],
+      seat: 'S', stakes: 1,
+      bots: ['Aggressive', 'Balanced', 'Defensive'],
+      chow: 1
+    };
+  }
+
+  componentDidUpdate(prev) {
+    const p = this.props;
+    if (prev.startView !== p.startView && p.startView) this.setState({ view: p.startView });
+    if (prev.showAnalysis !== p.showAnalysis) this.setState({ analysis: p.showAnalysis !== false });
+    if (prev.tileHeat !== p.tileHeat) this.setState({ heatOn: p.tileHeat !== false });
+  }
+  componentWillUnmount() { clearTimeout(this._t); }
+
+  set(view) { this.setState({ view: view }); }
+
+  discard(code, fromDrawn) {
+    if (this.state.view !== 'your-turn') return;
+    const hand = this.state.hand.slice();
+    if (!fromDrawn) {
+      const i = hand.findIndex(h => h[0] === code);
+      if (i < 0) return;
+      hand.splice(i, 1);
+      hand.push(this.state.drawn);
+    }
+    this.setState({
+      hand: hand,
+      riverS: this.state.riverS.concat([code]),
+      view: 'waiting',
+      expanded: null,
+      hintOpen: false
+    });
+    clearTimeout(this._t);
+    this._t = setTimeout(() => {
+      const turn = (this.state.turn + 1) % SCRIPT.length;
+      this.setState({ turn: turn, drawn: SCRIPT[turn].drawn, view: 'your-turn' });
+    }, 1900);
+  }
+
+  renderVals() {
+    const st = this.state;
+    const sc = SCRIPT[st.turn];
+    const isTurn = st.view === 'your-turn';
+    const waiting = st.view === 'waiting';
+    const recCode = sc.candidates[0].code;
+    const expanded = st.expanded || recCode;
+
+    const handTile = (entry, isDrawn) => {
+      const code = entry[0], h = entry[1];
+      const t = tile(code);
+      const rec = isTurn && code === recCode && (isDrawn ? recCode === code : true);
+      return Object.assign(t, {
+        rec: rec,
+        cursor: isTurn ? 'pointer' : 'default',
+        tf: rec ? 'translateY(-12px)' : 'none',
+        glow: rec
+          ? '0 0 0 2px #e8ac3d, 0 12px 26px rgba(232,172,61,.4)'
+          : '0 3px 0 #cec4aa, 0 8px 16px rgba(0,0,0,.32)',
+        heatBg: st.heatOn && isTurn ? heat(h) : 'rgba(0,0,0,.06)',
+        go: () => this.discard(code, isDrawn)
+      });
+    };
+
+    // only mark the first matching recommended tile
+    let recUsed = false;
+    const hand = st.hand.map(e => {
+      const t = handTile(e, false);
+      if (t.rec) { if (recUsed) t.rec = false, t.tf = 'none', t.glow = '0 3px 0 #cec4aa, 0 8px 16px rgba(0,0,0,.32)'; else recUsed = true; }
+      return t;
+    });
+    const drawnTile = handTile(st.drawn, true);
+    if (drawnTile.rec && recUsed) { drawnTile.rec = false; drawnTile.tf = 'none'; drawnTile.glow = '0 3px 0 #cec4aa, 0 8px 16px rgba(0,0,0,.32)'; }
+
+    const river = (codes, hot) => codes.map((c, i) => Object.assign(tile(c), {
+      ring: i === codes.length - 1
+        ? (hot ? '0 0 0 2px #e8ac3d, 0 6px 16px rgba(232,172,61,.45)' : '0 0 0 2px rgba(232,172,61,.55)')
+        : '0 1px 2px rgba(0,0,0,.3)'
+    }));
+
+    const segLabels = ['3 away', '2 away', '1 away', 'Ready'];
+    const filled = 4 - sc.shanten;
+    const segs = segLabels.map((label, i) => {
+      const on = i < filled;
+      const cur = i === filled - 1;
+      return {
+        label: label,
+        bg: on ? (sc.shanten === 0 ? '#6fae7f' : '#e8ac3d') : 'rgba(255,255,255,.08)',
+        shadow: cur ? '0 0 12px rgba(232,172,61,.5)' : 'none',
+        fg: on ? (sc.shanten === 0 ? '#a6d3b2' : '#e3cfa5') : '#5f7178'
+      };
+    });
+
+    const candidates = sc.candidates.map(c => {
+      const open = c.code === expanded;
+      return {
+        tile: tile(c.code),
+        rec: !!c.rec,
+        title: c.title,
+        acceptText: c.accept,
+        note: c.note,
+        open: open,
+        dangerPct: pct(c.danger),
+        dangerFg: heat(c.danger),
+        heatBg: heat(c.danger),
+        border: c.rec ? 'rgba(232,172,61,.42)' : 'rgba(255,255,255,.08)',
+        bg: c.rec ? 'rgba(232,172,61,.08)' : 'rgba(255,255,255,.03)',
+        bars: c.bars.map(b => ({ label: b[0], pct: pct(b[1]), color: heat(b[1]) })),
+        go: () => this.setState({ expanded: open ? '__none' : c.code })
+      };
+    });
+
+    const mkThreat = (char, name, persona, v, tell, suits) => ({
+      char: char, name: name, persona: persona, pct: v + '%', color: heat(v / 100), tell: tell,
+      suits: [['萬', suits[0]], ['筒', suits[1]], ['索', suits[2]], ['字', suits[3]]].map(s => ({ char: s[0], pct: s[1] + '%', color: heat(s[1] / 100) }))
+    });
+
+    const views = [
+      ['your-turn', 'Your turn'], ['claim', 'Claim'], ['kong', 'Kong'],
+      ['waiting', 'Waiting'], ['end', 'Game end'], ['setup', 'Setup']
+    ].map(v => ({
+      label: v[1],
+      bg: st.view === v[0] ? '#e8ac3d' : 'transparent',
+      fg: st.view === v[0] ? '#23180a' : '#9aa8ae',
+      go: () => this.set(v[0])
+    }));
+
+    const seats = [['E', '東', 'East', 'Dealer'], ['S', '南', 'South', ''], ['W', '西', 'West', ''], ['N', '北', 'North', '']].map(s => ({
+      char: s[1], name: s[2], tag: s[3] || '·',
+      tagFg: s[3] ? '#d99a2b' : 'rgba(0,0,0,0)',
+      border: st.seat === s[0] ? 'rgba(232,172,61,.6)' : 'rgba(255,255,255,.1)',
+      bg: st.seat === s[0] ? 'rgba(232,172,61,.12)' : 'rgba(255,255,255,.03)',
+      fg: st.seat === s[0] ? '#f0d9a6' : '#cfd8da',
+      go: () => this.setState({ seat: s[0] })
+    }));
+
+    const stakes = [[1, '1 chip / tai'], [2, '2 chips'], [5, '5 chips'], [10, '10 chips']].map(k => ({
+      label: k[1],
+      border: st.stakes === k[0] ? 'rgba(232,172,61,.6)' : 'rgba(255,255,255,.1)',
+      bg: st.stakes === k[0] ? 'rgba(232,172,61,.12)' : 'rgba(255,255,255,.03)',
+      fg: st.stakes === k[0] ? '#f0d9a6' : '#9aa8ae',
+      go: () => this.setState({ stakes: k[0] })
+    }));
+
+    const personas = ['Aggressive', 'Balanced', 'Defensive', 'Random'];
+    const botRows = [['東', 'Auntie Lim', 'right of you'], ['北', 'Kumar', 'across'], ['西', 'Mei Ling', 'left of you']].map((b, i) => ({
+      char: b[0], name: b[1], seat: b[2],
+      options: personas.map(p => ({
+        label: p,
+        border: st.bots[i] === p ? 'rgba(232,172,61,.6)' : 'rgba(255,255,255,.1)',
+        bg: st.bots[i] === p ? 'rgba(232,172,61,.14)' : 'rgba(255,255,255,.03)',
+        fg: st.bots[i] === p ? '#f0d9a6' : '#9aa8ae',
+        go: () => { const bots = st.bots.slice(); bots[i] = p; this.setState({ bots: bots }); }
+      }))
+    }));
+
+    const chows = [['3t', '4t'], ['4t', '6t'], ['6t', '7t']].map((c, i) => ({
+      tiles: [tile(c[0]), tile('5t'), tile(c[1])].map((t, j) => Object.assign({}, t, {
+        faceBg: j === 1 ? 'linear-gradient(#fff5d8, #f4e6bd)' : 'linear-gradient(#fbf7ec, #ece4cf)'
+      })),
+      border: st.chow === i ? 'rgba(232,172,61,.6)' : 'rgba(255,255,255,.1)',
+      bg: st.chow === i ? 'rgba(232,172,61,.12)' : 'rgba(255,255,255,.03)',
+      go: () => this.setState({ chow: i })
+    }));
+
+    return {
+      views: views,
+      isSetup: st.view === 'setup',
+      isTable: st.view !== 'setup',
+      showClaim: st.view === 'claim',
+      showKong: st.view === 'kong',
+      showEnd: st.view === 'end',
+      isWaiting: waiting,
+      analysis: st.analysis,
+      toggleAnalysis: () => this.setState({ analysis: !st.analysis }),
+      switchTrack: st.analysis ? '#d99a2b' : 'rgba(255,255,255,.16)',
+      switchX: st.analysis ? '15px' : '2px',
+      switchXBig: st.analysis ? '20px' : '3px',
+
+      pEast: {
+        char: '東', name: 'Auntie Lim', persona: 'Aggressive', chips: '96 chips', hidden: '× 7',
+        panelBg: 'rgba(232,172,61,.09)', panelBorder: 'rgba(232,172,61,.28)',
+        melds: [{ tiles: tiles(['8s', '8s', '8s']) }, { tiles: tiles(['2t', '3t', '4t']) }],
+        bonus: [bonus('春', 'flower'), bonus('猫', 'animal')],
+        tell: 'Two 筒 melds and pushing hard — she is 1 away.'
+      },
+      pNorth: {
+        char: '北', name: 'Kumar', persona: 'Balanced', chips: '104 chips', hidden: '× 10',
+        panelBg: 'rgba(8,20,17,.4)', panelBorder: 'rgba(255,255,255,.09)',
+        melds: [{ tiles: tiles(['S', 'S', 'S']) }],
+        bonus: [bonus('秋', 'flower')]
+      },
+      pWest: {
+        char: '西', name: 'Mei Ling', persona: 'Defensive', chips: '72 chips', hidden: '× 13',
+        panelBg: 'rgba(8,20,17,.4)', panelBorder: 'rgba(255,255,255,.09)',
+        melds: [],
+        bonus: [bonus('竹', 'flower'), bonus('鼠', 'animal')],
+        tell: 'Fully concealed, folding honours — safe to push at her.'
+      },
+      backs4: [1, 2, 3, 4],
+      myBonus: [bonus('梅', 'flower'), bonus('公鸡', 'animal')],
+
+      wall: 62, wallPct: '43%',
+      riverN: river(['C', '4w', '8s', 'S', '2t']),
+      riverW: river(['9w', '1s', 'B', '5w', '3s', '7t']),
+      riverE: river(['B', '2s', 'W', '1t', '6w', '5t'], st.view === 'claim'),
+      riverS: river(st.riverS),
+
+      turnLabel: waiting ? 'Mei Ling is thinking' : (st.view === 'claim' ? 'Claim window' : (st.view === 'kong' ? 'Your turn — kong offered' : 'Your turn')),
+      turnBg: isTurn || st.view === 'kong' ? 'rgba(232,172,61,.18)' : 'rgba(255,255,255,.06)',
+      turnBorder: isTurn || st.view === 'kong' ? 'rgba(232,172,61,.5)' : 'rgba(255,255,255,.12)',
+      turnFg: isTurn || st.view === 'kong' ? '#f0d9a6' : '#cfe6d8',
+      turnAnim: isTurn ? 'turnPulse 2.2s ease-out infinite' : 'none',
+
+      hand: hand,
+      drawn: [drawnTile],
+      handOpacity: isTurn || st.view === 'kong' ? '1' : '.58',
+      handHint: isTurn ? 'Click a tile to discard' : (waiting ? 'Bots are playing' : ''),
+      kongTiles: [tile('E'), tile('E'), tile('E'), Object.assign(tile('E'), { ring: '0 0 0 2px #e8ac3d' })].map(t => Object.assign({ ring: '0 1px 2px rgba(0,0,0,.3)' }, t)),
+      chows: chows,
+      pass: () => this.set('your-turn'),
+
+      shantenText: sc.shanten === 0 ? 'Ready!' : sc.shanten + ' away from ready',
+      shantenFg: sc.shanten === 0 ? '#8fd3a2' : '#f0d9a6',
+      shantenSub: sc.sub,
+      segs: segs,
+      isTenpai: sc.shanten === 0,
+      waits: tiles(sc.waits || []),
+      liveText: sc.live || '',
+
+      advisorNote: isTurn ? sc.note : 'Paused — resumes on your turn',
+      advisorNoteFg: isTurn ? '#6fae7f' : '#6f8189',
+      candidates: candidates,
+
+      threats: [
+        mkThreat('東', 'Auntie Lim', 'Aggressive', 72, 'Avoid 筒 — two melds showing', [30, 88, 45, 60]),
+        mkThreat('北', 'Kumar', 'Balanced', 41, 'Watch upper 萬', [66, 34, 30, 44]),
+        mkThreat('西', 'Mei Ling', 'Defensive', 18, 'Folding — safe to push', [20, 14, 26, 10])
+      ],
+
+      hintOpen: st.hintOpen,
+      hintBtnLabel: st.hintOpen ? 'Hide the coach’s line' : 'Show me what you would do',
+      toggleHint: () => this.setState({ hintOpen: !st.hintOpen }),
+      hintText: sc.shanten === 0
+        ? 'I would push 9 萬 and keep the two-sided wait. It is a terminal Auntie Lim has already seen, so the risk is small and you keep 5 winning tiles live.'
+        : 'I would discard 白 white dragon. Your 東東 pair is the natural fourth set, and two 白 are already in the river so nobody can pong it. Hold 5 筒 one more turn — if you draw a third, you are ready.',
+
+      winHand: [...tiles(['1t', '1t', '2t', '3t', '4t', '5t', '6t', '7t', '7t', '8t', '9t', 'W', 'W']).map(t => Object.assign(t, { ring: '0 1px 3px rgba(0,0,0,.3)' })),
+        Object.assign(tile('8t'), { ring: '0 0 0 2px #e8ac3d, 0 8px 18px rgba(232,172,61,.4)' })],
+      receipt: [
+        { en: 'Half Flush', zh: '混一色', tai: '+2' },
+        { en: 'Animal — Rooster', zh: '公鸡', tai: '+1' },
+        { en: 'Self-draw', zh: '自摸', tai: '+1' },
+        { en: 'Flower (own seat)', zh: '花', tai: '+0' }
+      ],
+      payments: [
+        { char: '南', name: 'You', delta: '+24', total: '152', fg: '#8fd3a2', bg: 'rgba(111,174,127,.12)', border: 'rgba(111,174,127,.3)' },
+        { char: '東', name: 'Auntie Lim', delta: '−8', total: '88', fg: '#d99a8f', bg: 'rgba(255,255,255,.03)', border: 'rgba(255,255,255,.08)' },
+        { char: '北', name: 'Kumar', delta: '−8', total: '96', fg: '#d99a8f', bg: 'rgba(255,255,255,.03)', border: 'rgba(255,255,255,.08)' },
+        { char: '西', name: 'Mei Ling', delta: '−8', total: '64', fg: '#d99a8f', bg: 'rgba(255,255,255,.03)', border: 'rgba(255,255,255,.08)' }
+      ],
+      nextHand: () => this.set('your-turn'),
+      toSetup: () => this.set('setup'),
+
+      seats: seats, stakes: stakes, botRows: botRows, seed: '7A2K-91',
+      personaLegend: [
+        { name: 'Aggressive', desc: 'Melds early, pushes for tai, rarely folds.' },
+        { name: 'Balanced', desc: 'Plays value against risk — a solid sparring partner.' },
+        { name: 'Defensive', desc: 'Folds fast, feeds you almost nothing.' },
+        { name: 'Random', desc: 'Unpredictable. Good for practising reads, bad for reads.' }
+      ],
+      randomize: () => this.setState({ seat: ['E', 'S', 'W', 'N'][Math.floor(Math.random() * 4)], bots: [0, 1, 2].map(() => personas[Math.floor(Math.random() * 4)]) }),
+      deal: () => this.set('your-turn')
+    };
+  }
+}
+</script>
+</body>
+</html>

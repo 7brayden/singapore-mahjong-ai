@@ -172,7 +172,14 @@ class InteractiveGame:
             "dealt_in_by": r.dealt_in_by,
             "turns": r.turns,
             "payments": list(r.payments) if r.payments else [0, 0, 0, 0],
+            "win_tile": r.win_tile,
         }
+        if r.winner is not None:
+            # The hand is over — revealing the winning hand is standard play
+            winner_hand = self.game.hands[r.winner]
+            view["winner_hand"] = sorted(winner_hand.tiles)
+            view["winner_exposed"] = [[kind, list(tiles)]
+                                      for kind, tiles in winner_hand.exposed]
         if r.winning_score is not None:
             s = r.winning_score
             view["score"] = {
