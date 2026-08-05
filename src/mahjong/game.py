@@ -13,9 +13,11 @@ Manages the full game loop:
      f. If claimed, claimer forms meld and discards; otherwise next player
   4. Game ends on: win, wall exhaustion (draw), or no more replacement tiles
 
+GameState plays a single hand with fixed dealer and prevailing wind;
+session.py chains hands into full multi-round sessions with dealer
+rotation and running scores.
+
 Current simplifications:
-  - Single hand per game: no dealer rotation or multi-round sessions yet
-    (seat winds and the prevailing wind are fixed at construction)
   - Kong replacement tiles draw from the front of the wall (same as
     flower replacements) rather than a separate back-of-wall dead wall
 """

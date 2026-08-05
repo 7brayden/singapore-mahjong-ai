@@ -68,6 +68,7 @@ src/mahjong/
 ├── defense.py             # Danger scoring for discard candidates
 ├── opponent_model.py      # Estimates how close each opponent is to winning
 ├── scoring.py             # Tai scoring, payments, house-rule config
+├── session.py             # Multi-round sessions: dealer rotation, running scores
 ├── advisor.py             # Interactive tool — input your hand, get advice
 └── agents/
     ├── random_agent.py    # Discards randomly. Never wins.
@@ -123,6 +124,14 @@ Every win is scored as a list of named tai items (`scoring.py`), so the UI can s
 | Big three dragons, four winds, all honors, all terminals | limit (5) |
 
 House rules live in `ScoreConfig` and are all adjustable: minimum 1 tai to win (chicken hands blocked by default), shooter pays all three shares on a ron, tsumo collects from everyone, animals/completed flower series pay out instantly when drawn, and kongs collect instantly too (1 base unit from each player, 2 for a concealed kong). Special hands (thirteen orphans, heaven/earth wins) are not yet implemented.
+
+## Sessions
+
+`session.py` chains hands into a full game: four prevailing-wind rounds, dealer repeats on a win or draw (连庄) and rotates otherwise, seat winds follow the dealership, and payments accumulate into running scores. One seed reproduces an entire session.
+
+```bash
+PYTHONPATH=src python3 -m mahjong.session   # demo: one East round, 2 Greedy vs 2 Hybrid
+```
 
 ## Benchmark results
 
@@ -184,7 +193,6 @@ python3 experiments/generate_plots.py     # result charts (needs matplotlib)
 ## Future work
 
 - Special hands: thirteen orphans, heaven/earth wins
-- Dealer rotation and multi-round sessions with running scores
 - Human-in-the-loop play: FastAPI backend + React UI with live stats (shanten, danger, opponent threat) so players learn while they play
 - LLM-powered move explanations grounded in the engine's analysis
 - Learned danger model trained on simulation data
