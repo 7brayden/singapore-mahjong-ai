@@ -27,12 +27,12 @@ import random
 from typing import List, Optional, Tuple, Dict
 from dataclasses import dataclass
 
-from tiles import (
+from mahjong.tiles import (
     create_wall, is_bonus, tile_short, hand_to_str,
     NUM_STANDARD_UNIQUE, NUM_TOTAL_TILES,
-    is_numbered, suit_of, rank_of
+    is_numbered, suit_of, rank_of, possible_chow_partners
 )
-from hand import Hand, calculate_shanten, is_winning_hand
+from mahjong.hand import Hand, calculate_shanten, is_winning_hand
 
 # Singapore Mahjong: game ends in a draw when 15 tiles remain in the wall.
 # These 15 tiles are "dead" and cannot be drawn.
@@ -62,18 +62,35 @@ class BaseAgent:
 
     def should_claim(self, player_idx: int, tile_id: int,
                      claim_type: str, game_state: "GameState") -> bool:
-        """Decide whether to claim a discarded tile for pong or chow.
+        """Decide whether to claim a discarded tile for a pong.
 
         Args:
             player_idx: which player is deciding
             tile_id: the discarded tile available to claim
-            claim_type: "pong" or "chow"
+            claim_type: "pong" (kong claims will be added later)
             game_state: current game state
 
         Returns:
             True to claim, False to pass
         """
         return False  # default: never claim
+
+    def choose_chow(self, player_idx: int, tile_id: int,
+                    options: List[Tuple[int, int]],
+                    game_state: "GameState") -> Optional[Tuple[int, int]]:
+        """Pick which chow to form with a discarded tile, or None to pass.
+
+        Args:
+            player_idx: which player is deciding
+            tile_id: the discarded tile available to claim
+            options: valid (partner1, partner2) pairs from this player's
+                     concealed hand that complete a run with tile_id
+            game_state: current game state
+
+        Returns:
+            One of the pairs from options, or None to pass.
+        """
+        return None  # default: never claim
 
 
 # ── Game result ───────────────────────────────────────────────────────
@@ -176,7 +193,7 @@ class GameState:
 
         for _ in range(13):
             for p in range(4):
-                self._deal_tile_to(p)
+                self._deal_tile_to(p) 
 
     # ── Visible information helpers (for agents) ──────────────────────
 
@@ -234,7 +251,9 @@ class GameState:
         """Check if the next player wants to chow the discarded tile.
 
         Only the player immediately after the discarder can chow.
-        Only numbered tiles can form chows.
+        Only numbered tiles can form chows. The agent chooses which
+        combination to form via choose_chow.
+
         Returns (claimer, [partner1, partner2]) or None.
         """
         if not is_numbered(tile_id):
@@ -242,39 +261,25 @@ class GameState:
 
         next_player = (discarder + 1) % 4
         hand = self.hands[next_player]
-        tile_rank = rank_of(tile_id)
-        tile_suit_start = (tile_id // 9) * 9
 
-        # Find all possible chow combinations with this tile
-        possible_chows = []
+        options = [
+            (p1, p2) for p1, p2 in possible_chow_partners(tile_id)
+            if hand.counts[p1] >= 1 and hand.counts[p2] >= 1
+        ]
+        if not options:
+            return None
 
-        # tile is leftmost: [tile, tile+1, tile+2]
-        if tile_rank <= 7:
-            p1, p2 = tile_id + 1, tile_id + 2
-            if suit_of(p1) == suit_of(tile_id) and suit_of(p2) == suit_of(tile_id):
-                if hand.counts[p1] >= 1 and hand.counts[p2] >= 1:
-                    possible_chows.append([p1, p2])
+        choice = self.agents[next_player].choose_chow(next_player, tile_id, options, self)
+        if choice is None:
+            return None
 
-        # tile is middle: [tile-1, tile, tile+1]
-        if tile_rank >= 2 and tile_rank <= 8:
-            p1, p2 = tile_id - 1, tile_id + 1
-            if suit_of(p1) == suit_of(tile_id) and suit_of(p2) == suit_of(tile_id):
-                if hand.counts[p1] >= 1 and hand.counts[p2] >= 1:
-                    possible_chows.append([p1, p2])
-
-        # tile is rightmost: [tile-2, tile-1, tile]
-        if tile_rank >= 3:
-            p1, p2 = tile_id - 2, tile_id - 1
-            if suit_of(p1) == suit_of(tile_id) and suit_of(p2) == suit_of(tile_id):
-                if hand.counts[p1] >= 1 and hand.counts[p2] >= 1:
-                    possible_chows.append([p1, p2])
-
-        if possible_chows:
-            if self.agents[next_player].should_claim(next_player, tile_id, "chow", self):
-                # Use the first valid combination
-                return (next_player, possible_chows[0])
-
-        return None
+        choice = tuple(choice)
+        if choice not in options:
+            raise ValueError(
+                f"Agent {self.agents[next_player].name} (P{next_player}) chose "
+                f"invalid chow {choice} for {tile_short(tile_id)}; options: {options}"
+            )
+        return (next_player, list(choice))
 
     def _execute_claim(self, claimer: int, tile_id: int,
                        claim_type: str, partners: Optional[List[int]] = None):
@@ -300,24 +305,8 @@ class GameState:
             meld_tiles = sorted([tile_id] + partners)
             hand.add_exposed_meld("chow", meld_tiles)
 
-        # Claimer now has 14 - 3 + ... wait, let's think about tile count:
-        # Before claim: claimer has 13 tiles (normal hand)
-        # We removed 2 (pong) or 2 (chow partners) = 11 tiles
-        # The claimed tile is NOT added to hand.tiles — it goes straight to the meld
-        # So claimer has 11 tiles + 1 exposed meld = needs to be at 13 - 3 = 10
-        # Actually: each exposed meld represents 3 tiles removed from the concealed hand
-        # A player with N exposed melds has 13 - 3*N concealed tiles
-        # After claiming: concealed = 13 - 3*(melds-1) - 2 = 13 - 3*melds + 3 - 2 = 14 - 3*melds
-        # That's one too many — they need to discard!
-        # Wait, let me recalculate:
-        # Start: 13 concealed tiles, M exposed melds (each = 3 tiles)
-        # Total tiles owned = 13 + 3*M
-        # After claim: removed 2 from concealed, added 1 new meld (3 tiles)
-        # New concealed = 13 - 2 = 11, new melds = M+1
-        # Total = 11 + 3*(M+1) = 11 + 3M + 3 = 14 + 3M
-        # That's 1 more than the 13 + 3M they should have — need to discard
-
-        # Agent chooses discard
+        # After a claim the claimer effectively holds one tile too many
+        # (2 concealed tiles left for a 3-tile meld) and must discard.
         discard_tile = self.agents[claimer].choose_discard(claimer, self)
 
         if discard_tile not in hand.tiles:
@@ -360,90 +349,62 @@ class GameState:
         # 4. Discard
         hand.discard(discard_tile)
 
-        # 5. Claim resolution — priority: Ron > Pong > Chow
-        # 5a. Ron check
-        ron_winner = None
+        # 5. Resolve claims on the discard (ron > pong > chow, repeating
+        #    for each claimer's follow-up discard)
+        return self._resolve_discard(p, discard_tile)
+
+    def _check_ron(self, discarder: int, tile_id: int) -> Optional[int]:
+        """Check whether any opponent wins on the discarded tile.
+
+        Every opponent waiting on the tile counts as a deal-in for the
+        discarder; the winner is the closest waiting opponent in turn order.
+        """
+        winner = None
         for offset in range(1, 4):
-            opponent = (p + offset) % 4
+            opponent = (discarder + offset) % 4
             opp_hand = self.hands[opponent]
-            opp_hand.counts[discard_tile] += 1
+            opp_hand.counts[tile_id] += 1
             if is_winning_hand(opp_hand.counts, opp_hand.num_exposed_melds):
-                if ron_winner is None:
-                    ron_winner = opponent
-                self.deal_ins[p] += 1
-            opp_hand.counts[discard_tile] -= 1
+                if winner is None:
+                    winner = opponent
+                self.deal_ins[discarder] += 1
+            opp_hand.counts[tile_id] -= 1
+        return winner
 
-        if ron_winner is not None:
-            self.hands[ron_winner].add_tile(discard_tile)
-            self._end_game(winner=ron_winner, win_type="ron", dealt_in_by=p)
-            return False
+    def _resolve_discard(self, discarder: int, tile_id: int) -> bool:
+        """Resolve claims on a discard with priority ron > pong > chow.
 
-        # 5b. Pong check (any opponent, priority by turn order)
-        pong_claimer = self._check_pong(p, discard_tile)
-        if pong_claimer is not None:
-            # Remove tile from discard pile (it was just added)
-            hand.discards.pop()
-
-            new_discard = self._execute_claim(pong_claimer, discard_tile, "pong")
-
-            # Check ron on the claimer's discard
-            ron_winner2 = None
-            for offset in range(1, 4):
-                opponent = (pong_claimer + offset) % 4
-                opp_hand = self.hands[opponent]
-                opp_hand.counts[new_discard] += 1
-                if is_winning_hand(opp_hand.counts, opp_hand.num_exposed_melds):
-                    if ron_winner2 is None:
-                        ron_winner2 = opponent
-                    self.deal_ins[pong_claimer] += 1
-                opp_hand.counts[new_discard] -= 1
-
-            if ron_winner2 is not None:
-                self.hands[ron_winner2].add_tile(new_discard)
-                self._end_game(winner=ron_winner2, win_type="ron", dealt_in_by=pong_claimer)
+        When a pong/chow is claimed, the claimer discards and that new
+        discard opens a fresh claim window (ron, pong, chow) — resolved
+        by looping. Returns True if the game continues, False if over.
+        """
+        while True:
+            ron_winner = self._check_ron(discarder, tile_id)
+            if ron_winner is not None:
+                self.hands[ron_winner].add_tile(tile_id)
+                self._end_game(winner=ron_winner, win_type="ron", dealt_in_by=discarder)
                 return False
 
-            # Turn passes to player after the claimer
-            self.active_player = (pong_claimer + 1) % 4
+            pong_claimer = self._check_pong(discarder, tile_id)
+            if pong_claimer is not None:
+                # Remove the tile from the discard pile (it was just added)
+                self.hands[discarder].discards.pop()
+                tile_id = self._execute_claim(pong_claimer, tile_id, "pong")
+                discarder = pong_claimer
+                continue
+
+            chow_result = self._check_chow(discarder, tile_id)
+            if chow_result is not None:
+                chow_claimer, partners = chow_result
+                self.hands[discarder].discards.pop()
+                tile_id = self._execute_claim(chow_claimer, tile_id, "chow", partners)
+                discarder = chow_claimer
+                continue
+
+            # No claims — turn passes to the player after the last discarder
+            self.active_player = (discarder + 1) % 4
             self.turn += 1
             return True
-
-        # 5c. Chow check (next player only)
-        chow_result = self._check_chow(p, discard_tile)
-        if chow_result is not None:
-            chow_claimer, partners = chow_result
-
-            # Remove tile from discard pile
-            hand.discards.pop()
-
-            new_discard = self._execute_claim(chow_claimer, discard_tile, "chow", partners)
-
-            # Check ron on the claimer's discard
-            ron_winner3 = None
-            for offset in range(1, 4):
-                opponent = (chow_claimer + offset) % 4
-                opp_hand = self.hands[opponent]
-                opp_hand.counts[new_discard] += 1
-                if is_winning_hand(opp_hand.counts, opp_hand.num_exposed_melds):
-                    if ron_winner3 is None:
-                        ron_winner3 = opponent
-                    self.deal_ins[chow_claimer] += 1
-                opp_hand.counts[new_discard] -= 1
-
-            if ron_winner3 is not None:
-                self.hands[ron_winner3].add_tile(new_discard)
-                self._end_game(winner=ron_winner3, win_type="ron", dealt_in_by=chow_claimer)
-                return False
-
-            # Turn passes to player after the claimer (which is chow_claimer + 1)
-            self.active_player = (chow_claimer + 1) % 4
-            self.turn += 1
-            return True
-
-        # 6. No claims — next player
-        self.active_player = (self.active_player + 1) % 4
-        self.turn += 1
-        return True
 
     def _end_game(self, winner: Optional[int], win_type: Optional[str],
                   dealt_in_by: Optional[int] = None):
@@ -519,7 +480,7 @@ class _RandomAgent(BaseAgent):
     """Minimal random agent for testing the game loop."""
     def choose_discard(self, player_idx, game_state):
         hand = game_state.hands[player_idx]
-        return random.choice(hand.tiles)
+        return game_state.rng.choice(hand.tiles)
 
 
 if __name__ == "__main__":

@@ -17,7 +17,7 @@ The per-tile threat score combines:
 
 from typing import List, Dict, Optional, Tuple
 
-from tiles import (
+from mahjong.tiles import (
     NUM_STANDARD_UNIQUE, tile_short, is_numbered, is_honor, is_bonus,
     suit_of, rank_of, Suit,
     WAN_START, TONG_START, SUO_START, WIND_START, DRAGON_START
@@ -203,12 +203,9 @@ def tile_threat_score(tile_id: int, player_idx: int, game_state,
 
 if __name__ == "__main__":
     import random
-    import sys
-    import os
-    sys.path.insert(0, os.path.dirname(__file__))
 
-    from game import GameState, BaseAgent
-    from tiles import hand_to_str
+    from mahjong.game import GameState, BaseAgent
+    from mahjong.tiles import hand_to_str
 
     class _RandomAgent(BaseAgent):
         def choose_discard(self, player_idx, game_state):

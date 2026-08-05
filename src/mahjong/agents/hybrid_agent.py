@@ -17,19 +17,17 @@ when already close to winning (shanten <= 2), since exposing melds
 reveals information to opponents.
 """
 
-import sys
-import os
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-
-from game import BaseAgent
-from hand import evaluate_discards, calculate_shanten
-from defense import estimate_danger
-from tiles import NUM_STANDARD_UNIQUE, is_bonus, is_numbered, suit_of, rank_of, tile_short
+from mahjong.game import BaseAgent
+from mahjong.hand import evaluate_discards, calculate_shanten, best_chow_option
+from mahjong.defense import estimate_danger
 
 
 class HybridAgent(BaseAgent):
     """Fuses offense and defense scores with dynamic weighting."""
+
+    # Only claim pong/chow at or below this shanten — exposing melds
+    # reveals information, so only do it when it matters.
+    CLAIM_SHANTEN_LIMIT = 2
 
     def __init__(self, name: str = "Hybrid",
                  base_offense_weight: float = 0.6,
@@ -40,39 +38,37 @@ class HybridAgent(BaseAgent):
 
     def should_claim(self, player_idx: int, tile_id: int,
                      claim_type: str, game_state) -> bool:
-        """Claim if it improves shanten, but only when already close to winning.
-        Exposing melds reveals information, so only do it when it matters."""
+        """Claim a pong if it improves shanten, but only when already close
+        to winning."""
+        if claim_type != "pong":
+            return False
+
         hand = game_state.hands[player_idx]
-        current_shanten = calculate_shanten(hand.copy_counts(), hand.num_exposed_melds)
-
-        # Only claim if reasonably close to winning
-        if current_shanten > 2:
-            return False
-
         counts = hand.copy_counts()
-        if claim_type == "pong":
-            if counts[tile_id] < 2:
-                return False
-            counts[tile_id] -= 2
-            new_shanten = calculate_shanten(counts, hand.num_exposed_melds + 1)
-        elif claim_type == "chow":
-            if not is_numbered(tile_id):
-                return False
-            best = current_shanten
-            for p1, p2 in _chow_partners(tile_id, counts):
-                test = counts[:]
-                test[p1] -= 1
-                test[p2] -= 1
-                s = calculate_shanten(test, hand.num_exposed_melds + 1)
-                if s < best:
-                    best = s
-            new_shanten = best
-            if new_shanten >= current_shanten:
-                return False
-        else:
+        if counts[tile_id] < 2:
             return False
 
+        current_shanten = calculate_shanten(counts, hand.num_exposed_melds)
+        if current_shanten > self.CLAIM_SHANTEN_LIMIT:
+            return False
+
+        counts[tile_id] -= 2
+        new_shanten = calculate_shanten(counts, hand.num_exposed_melds + 1)
         return new_shanten < current_shanten
+
+    def choose_chow(self, player_idx: int, tile_id: int,
+                    options, game_state):
+        """Claim the best chow combination, but only when already close
+        to winning."""
+        hand = game_state.hands[player_idx]
+        counts = hand.copy_counts()
+
+        current_shanten = calculate_shanten(counts, hand.num_exposed_melds)
+        if current_shanten > self.CLAIM_SHANTEN_LIMIT:
+            return None
+
+        best_pair, _ = best_chow_option(counts, hand.num_exposed_melds, options)
+        return best_pair
 
     def choose_discard(self, player_idx: int, game_state) -> int:
         hand = game_state.hands[player_idx]
@@ -172,37 +168,11 @@ class HybridAgent(BaseAgent):
         return off_w, def_w
 
 
-# ── Helper (module-level, outside the class) ──────────────────────────
-
-def _chow_partners(tile_id, counts):
-    """Yield (partner1, partner2) pairs for possible chows with tile_id."""
-    rank = rank_of(tile_id)
-    # tile is leftmost: [tile, tile+1, tile+2]
-    if rank <= 7:
-        p1, p2 = tile_id + 1, tile_id + 2
-        if suit_of(p1) == suit_of(tile_id) and counts[p1] >= 1 and counts[p2] >= 1:
-            yield (p1, p2)
-    # tile is middle: [tile-1, tile, tile+1]
-    if rank >= 2 and rank <= 8:
-        p1, p2 = tile_id - 1, tile_id + 1
-        if suit_of(p1) == suit_of(tile_id) and counts[p1] >= 1 and counts[p2] >= 1:
-            yield (p1, p2)
-    # tile is rightmost: [tile-2, tile-1, tile]
-    if rank >= 3:
-        p1, p2 = tile_id - 2, tile_id - 1
-        if suit_of(p1) == suit_of(tile_id) and counts[p1] >= 1 and counts[p2] >= 1:
-            yield (p1, p2)
-
-
 # ══════════════════════════════════════════════════════════════════════
 
 if __name__ == "__main__":
-    import random
-    sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-    from game import GameState
-    from random_agent import RandomAgent
-    from greedy_agent import GreedyAgent
-    from defensive_agent import DefensiveAgent
+    from mahjong.game import GameState
+    from mahjong.agents.greedy_agent import GreedyAgent
 
     total = 50
 

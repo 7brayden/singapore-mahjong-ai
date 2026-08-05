@@ -11,30 +11,26 @@ Expected behavior:
   - No strategic reasoning whatsoever
 """
 
-import random
-import sys
-import os
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-
-from game import BaseAgent
+from mahjong.game import BaseAgent
 
 
 class RandomAgent(BaseAgent):
-    """Discards a random tile from the hand."""
+    """Discards a random tile from the hand.
+
+    Uses the game's seeded RNG so that seeded games stay reproducible.
+    """
 
     def __init__(self, name: str = "Random"):
         super().__init__(name)
 
     def choose_discard(self, player_idx: int, game_state) -> int:
         hand = game_state.hands[player_idx]
-        return random.choice(hand.tiles)
+        return game_state.rng.choice(hand.tiles)
 
 
 if __name__ == "__main__":
     # Quick test: run 100 games of 4 random agents
-    sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-    from game import GameState
+    from mahjong.game import GameState
 
     wins = 0
     total = 100

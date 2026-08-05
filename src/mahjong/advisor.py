@@ -20,15 +20,12 @@ danger estimation accuracy.
 """
 
 import sys
-import os
 
-sys.path.insert(0, os.path.dirname(__file__))
-
-from tiles import (
+from mahjong.tiles import (
     NUM_STANDARD_UNIQUE, tile_short, tile_name, suit_of, rank_of,
     is_numbered, is_honor, is_bonus, hand_to_str, Suit
 )
-from hand import (
+from mahjong.hand import (
     Hand, calculate_shanten, evaluate_discards,
     tile_acceptance, get_winning_tiles, is_winning_hand
 )
@@ -297,8 +294,12 @@ def demo():
     display_analysis(analysis)
 
 
-if __name__ == "__main__":
+def main():
     if len(sys.argv) > 1 and sys.argv[1] == "--demo":
         demo()
     else:
         interactive()
+
+
+if __name__ == "__main__":
+    main()

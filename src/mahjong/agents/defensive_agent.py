@@ -16,13 +16,8 @@ Expected behavior:
   - Final shanten: high (hand doesn't improve efficiently)
 """
 
-import sys
-import os
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-
-from game import BaseAgent
-from defense import evaluate_danger_all
+from mahjong.game import BaseAgent
+from mahjong.defense import evaluate_danger_all
 
 
 class DefensiveAgent(BaseAgent):
@@ -42,11 +37,9 @@ class DefensiveAgent(BaseAgent):
 
 
 if __name__ == "__main__":
-    import random
-    sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-    from game import GameState
-    from random_agent import RandomAgent
-    from greedy_agent import GreedyAgent
+    from mahjong.game import GameState
+    from mahjong.agents.random_agent import RandomAgent
+    from mahjong.agents.greedy_agent import GreedyAgent
 
     total = 100
 

@@ -21,7 +21,7 @@ is a weighted combination.
 
 from typing import List, Dict, Optional, Tuple
 
-from tiles import (
+from mahjong.tiles import (
     NUM_STANDARD_UNIQUE, tile_short, is_numbered, is_honor, is_bonus,
     suit_of, rank_of, neighbors, Suit,
     WAN_START, TONG_START, SUO_START, WIND_START, DRAGON_START
@@ -53,7 +53,7 @@ def estimate_danger(
     Returns:
         Danger score in [0.0, 1.0] where higher = more dangerous
     """
-    from opponent_model import tile_threat_score
+    from mahjong.opponent_model import tile_threat_score
 
     scores = {
         "visibility": _score_visibility(tile_id, player_idx, game_state),
@@ -79,7 +79,7 @@ def estimate_danger_detailed(
     threat_data=None,
 ) -> Dict:
     """Same as estimate_danger but returns the full breakdown."""
-    from opponent_model import tile_threat_score
+    from mahjong.opponent_model import tile_threat_score
 
     scores = {
         "visibility": _score_visibility(tile_id, player_idx, game_state),
@@ -215,7 +215,7 @@ def evaluate_danger_all(
     Returns list of dicts sorted by danger (safest first):
         [{"tile_id": int, "danger": float, "components": {...}}, ...]
     """
-    from opponent_model import estimate_opponent_threats
+    from mahjong.opponent_model import estimate_opponent_threats
 
     # Compute threat data once for all tiles
     threat_data = estimate_opponent_threats(player_idx, game_state)
@@ -239,11 +239,8 @@ def evaluate_danger_all(
 
 if __name__ == "__main__":
     import random
-    import sys
-    import os
-    sys.path.insert(0, os.path.dirname(__file__))
 
-    from game import GameState, BaseAgent
+    from mahjong.game import GameState, BaseAgent
 
     class _RandomAgent(BaseAgent):
         def choose_discard(self, player_idx, game_state):

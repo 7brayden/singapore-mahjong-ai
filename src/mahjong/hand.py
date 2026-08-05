@@ -21,7 +21,7 @@ This makes meld extraction and shanten calculation efficient.
 from typing import List, Dict, Optional, Tuple, Set
 from collections import Counter
 
-from tiles import (
+from mahjong.tiles import (
     NUM_STANDARD_UNIQUE, tile_short, tile_name, hand_to_str,
     suit_of, rank_of, is_numbered, is_honor, is_bonus,
     Suit, WAN_START, TONG_START, SUO_START, WIND_START, DRAGON_START
@@ -301,6 +301,37 @@ def tile_acceptance(counts: List[int], num_exposed_melds: int = 0,
             total_acceptance += remaining
 
     return improving_tiles, total_acceptance
+
+
+# ══════════════════════════════════════════════════════════════════════
+# CLAIM EVALUATION
+# ══════════════════════════════════════════════════════════════════════
+
+def best_chow_option(counts: List[int], num_exposed_melds: int,
+                     options) -> Tuple[Optional[Tuple[int, int]], int]:
+    """Find the chow combination that lowers shanten the most.
+
+    Args:
+        counts: concealed tile counts before claiming
+        num_exposed_melds: exposed melds before claiming
+        options: iterable of (partner1, partner2) tile-id pairs
+
+    Returns:
+        (best_pair, best_shanten): the pair giving the lowest post-claim
+        shanten, or (None, current_shanten) if no option improves it.
+    """
+    current = calculate_shanten(counts, num_exposed_melds)
+    best_pair = None
+    best_shanten = current
+    for p1, p2 in options:
+        test = counts[:]
+        test[p1] -= 1
+        test[p2] -= 1
+        s = calculate_shanten(test, num_exposed_melds + 1)
+        if s < best_shanten:
+            best_shanten = s
+            best_pair = (p1, p2)
+    return best_pair, best_shanten
 
 
 # ══════════════════════════════════════════════════════════════════════

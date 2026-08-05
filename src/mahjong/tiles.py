@@ -234,13 +234,14 @@ def neighbors(tile_id: int) -> List[int]:
 # ── Wall creation ─────────────────────────────────────────────────────
 
 def create_wall() -> List[int]:
-    """Create a full shuffled wall of 148 tiles.
+    """Create a full, unshuffled wall of 148 tiles.
 
     Returns a list of tile IDs where each standard tile (0-33) appears
     4 times and each bonus tile (34-45) appears once.
-    """
-    import random
 
+    The caller is responsible for shuffling. GameState shuffles with its
+    own seeded RNG so that a given seed always produces the same game.
+    """
     wall = []
     # 4 copies of each standard tile
     for tile_id in range(NUM_STANDARD_UNIQUE):
@@ -252,7 +253,6 @@ def create_wall() -> List[int]:
         wall.append(tile_id)
 
     assert len(wall) == NUM_TOTAL_TILES  # 148
-    random.shuffle(wall)
     return wall
 
 
@@ -300,7 +300,9 @@ if __name__ == "__main__":
     print(f"  Animals: {' '.join(animals)}")
 
     print(f"\n--- Wall ---")
+    import random
     wall = create_wall()
+    random.shuffle(wall)  # demo only; GameState shuffles with a seeded RNG
     print(f"  Total tiles: {len(wall)}")
     print(f"  First 20: {hand_to_str(wall[:20], short=True)}")
 

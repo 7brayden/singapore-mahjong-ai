@@ -18,13 +18,13 @@ import os
 import time
 from typing import List, Dict, Tuple
 
+# Allow running without installing the package (pip install -e .)
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from game import GameState, GameResult, BaseAgent
-from agents.random_agent import RandomAgent
-from agents.greedy_agent import GreedyAgent
-from agents.defensive_agent import DefensiveAgent
-from agents.hybrid_agent import HybridAgent
+from mahjong.game import GameState, GameResult, BaseAgent
+from mahjong.agents import (
+    RandomAgent, GreedyAgent, DefensiveAgent, HybridAgent
+)
 
 
 # ── Experiment runner ─────────────────────────────────────────────────

@@ -15,6 +15,7 @@ import sys
 import os
 import time
 
+# Allow running without installing the package (pip install -e .)
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 import matplotlib
@@ -23,11 +24,10 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import numpy as np
 
-from game import GameState
-from agents.random_agent import RandomAgent
-from agents.greedy_agent import GreedyAgent
-from agents.defensive_agent import DefensiveAgent
-from agents.hybrid_agent import HybridAgent
+from mahjong.game import GameState
+from mahjong.agents import (
+    RandomAgent, GreedyAgent, DefensiveAgent, HybridAgent
+)
 
 
 # ── Color palette ─────────────────────────────────────────────────────
