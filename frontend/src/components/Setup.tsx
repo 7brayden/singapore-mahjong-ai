@@ -13,6 +13,7 @@ export const PERSONAS: Array<{ id: string; label: string; desc: string }> = [
   { id: "balanced", label: "Balanced", desc: "Plays value against risk — a solid sparring partner." },
   { id: "defensive", label: "Defensive", desc: "Folds fast, feeds you almost nothing." },
   { id: "random", label: "Random", desc: "Unpredictable. Good for practising reads, bad for reads." },
+  { id: "trained", label: "Trained", desc: "Defense learned from thousands of simulated games." },
 ];
 
 export const PERSONA_TO_BOT: Record<string, string> = {
@@ -20,6 +21,7 @@ export const PERSONA_TO_BOT: Record<string, string> = {
   balanced: "hybrid",
   defensive: "defensive",
   random: "random",
+  trained: "learned",
 };
 
 export const BOT_NAMES = ["Auntie Lim", "Kumar", "Mei Ling"];

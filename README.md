@@ -72,16 +72,24 @@ src/mahjong/
 ├── interactive.py         # Human-in-the-loop controller with redacted views
 ├── advisor.py             # Interactive tool — input your hand, get advice
 ├── server/                # FastAPI backend: games, actions, hints, analysis, websocket
+├── ml/                    # Learned models: datagen → train → pure-Python inference
+│   ├── features.py        # Feature extraction shared by training and play
+│   ├── datagen.py         # Simulates games, dumps labeled decision records
+│   ├── train.py           # Fits models, prints metrics vs the heuristic (needs sklearn)
+│   ├── model.py           # Evaluates exported JSON weights — zero dependencies
+│   └── danger_model.json  # Trained deal-in model (committed, human-readable)
 └── agents/
     ├── random_agent.py    # Discards randomly. Never wins.
     ├── greedy_agent.py    # Minimises shanten. Wins a lot, deals in often.
     ├── defensive_agent.py # Minimises danger. Safe, never wins.
-    └── hybrid_agent.py    # Balances offense and defense with dynamic weights.
+    ├── hybrid_agent.py    # Balances offense and defense with dynamic weights.
+    └── learned_agent.py   # Hybrid offense + danger model trained on simulations.
 
 tests/                     # pytest suite: shanten, claims, determinism, golden games
 
 experiments/
 ├── run_benchmark.py       # Runs 6 experiments, prints results
+├── compare_learned.py     # Learned vs Hybrid head-to-head
 └── generate_plots.py      # Bar charts from benchmark data (needs matplotlib)
 
 results/
@@ -105,6 +113,57 @@ Melds - completed sets of 3 or 4 tiles.
 **Opponent modelling.** Estimates each opponent's threat from what you can see: exposed melds, whether they keep their draws (discard efficiency), whether they're clearing safe tiles late (a tenpai tell), and which suits they avoid discarding.
 
 **Hybrid agent.** Scores each discard on offense (shanten + acceptance) and defense (danger), then combines them with weights that shift by context — aggressive when close to winning, cautious when far, more defensive late. It also claims pong/chow selectively, only when shanten ≤ 2 and the claim genuinely helps. Greedy claims everything; the hybrid avoids exposing information it doesn't need to.
+
+## Learned danger model
+
+The heuristic danger weights above are hand-tuned guesses. The `mahjong/ml/` pipeline replaces them with weights fitted to actual outcomes:
+
+1. **Generate data** — `datagen.py` plays thousands of seeded games with mixed lineups and records every discard decision from all four seats. Because the simulator sees all hands, every *candidate* tile gets a ground-truth label — `waited_legal`: would discarding this tile deal in right now? That's dense supervision (every hot tile at every decision), not just the ~2% of discards that actually got ronned.
+2. **Train** — `train.py` fits a logistic regression on those labels (a gradient-boosting ceiling check confirms how much a fancier model would add), evaluates on held-out games against the hand-tuned baseline, and prints the coefficient table: what the data says each signal is actually worth.
+3. **Play** — the model is exported as JSON (features, means, scales, coefficients) and evaluated in pure Python at play time; no numpy/sklearn at inference. `LearnedAgent` is the hybrid with its defense swapped for the model's calibrated deal-in probability, and the `/analysis` endpoint reports that probability per candidate discard (`deal_in_prob`) so the UI can say "this tile deals in 4% of the time" instead of an abstract danger score.
+
+```bash
+pip install -e ".[ml]"                                  # numpy + scikit-learn (training only)
+PYTHONPATH=src python3 -m mahjong.ml.datagen --games 3000 --out data/
+PYTHONPATH=src python3 -m mahjong.ml.train --data data/
+PYTHONPATH=src python3 experiments/compare_learned.py   # benchmark vs Hybrid
+```
+
+### What the data said (3,000 games, 1.4M candidate discards, held-out test)
+
+| Ranking hot tiles | ROC AUC | PR AUC |
+|---|---|---|
+| Hand-tuned heuristic (defense.py) | 0.570 | 0.041 |
+| Logistic regression | **0.867** | **0.133** |
+| Gradient boosting (ceiling check) | 0.871 | 0.128 |
+
+The heuristic blend was barely better than a coin flip at spotting genuinely
+dangerous tiles. The learned model's strongest signals are ones the heuristic
+underweights: *this exact tile is already in an opponent's river* (−0.58),
+*melds are exposed* (+0.56), *it's late* (+0.54), *the neighbouring ranks are
+dead* (−0.50). The four heuristic signals it was supposed to re-weight all
+landed near zero — including opponent_threat, the old blend's 0.35-weight star.
+A win-probability model (AUC 0.750 vs 0.674 for shanten alone) is trained by
+the same script for the upcoming EV work.
+
+### The integration lesson (honest numbers)
+
+Better prediction did not instantly make a better player:
+
+| 300 games each, seats alternate | Win% | DI/disc% |
+|---|---|---|
+| Mirror: 4× Learned | 23.8/seat | 1.44 |
+| vs Hybrid — Hybrid / **Learned** | 26.2 / **21.8** | 1.30 / **1.90** |
+| vs Greedy — Greedy / **Learned** | 29.5 / **19.7** | 2.08 / **1.69** |
+
+Against concealed hands the model's best features go quiet (nothing exposed,
+nothing proven safe), its calibrated ~2% probabilities flatten the defense term,
+and the agent drifts toward pure offense — dealing in *more* than the crudely
+fearful heuristic it replaced. A calibrated probability squashed into a slot
+built for an inflated 0–1 danger score loses the caution the blend was balanced
+around. The fix is not another tuned constant; it's making the decision an
+expected-value comparison — `P(deal-in) × ron cost` against `ΔP(win) × hand
+value` — using both trained models. That's the next phase.
 
 ## Scoring (tai)
 
@@ -249,9 +308,8 @@ python3 experiments/generate_plots.py     # result charts (needs matplotlib)
 - Special hands: thirteen orphans, heaven/earth wins
 - Post-game review screen ("Review game with coach") over a hand event log
 - Multi-hand browser sessions backed by session.py (dealer rotation in the UI)
-- LLM move explanations (`/explain`) grounded in the analysis endpoint
-- LLM-powered move explanations grounded in the engine's analysis
-- Learned danger model trained on simulation data
+- LLM move explanations (`/explain`) grounded in the analysis endpoint + RAG strategy corpus
+- Win-probability model in the push/fold decision (EV-aware play)
 - Lookahead: sample future draws, estimate discard value
 - Tune hybrid weights to detected opponent strength
 
@@ -261,5 +319,7 @@ python3 experiments/generate_plots.py     # result charts (needs matplotlib)
 - Heuristic search with pruning and block-capping
 - Multi-objective decision making (offense vs defense)
 - Opponent modelling from observable information
+- Supervised learning on simulation data: perfect-information labels,
+  group-wise train/test splits, calibration, interpretable models
 - Experiment design with controlled baselines and normalised metrics
 - Catching a misleading metric (DI/game vs DI/disc%)

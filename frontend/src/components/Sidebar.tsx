@@ -37,8 +37,12 @@ function candidateNote(c: DiscardAnalysis, isBest: boolean): string {
   const danger = Math.round(c.danger * 100);
   const risk = danger >= 60 ? "a risky throw right now" :
                danger >= 35 ? "a moderate risk" : "a safe throw";
-  return `${isBest ? "Best line — this" : "This"} ${stage} with ${c.acceptance} improving ${
+  const base = `${isBest ? "Best line — this" : "This"} ${stage} with ${c.acceptance} improving ${
     c.acceptance === 1 ? "tile" : "tiles"}, and it's ${risk} (${danger}%).`;
+  if (c.deal_in_prob === undefined) return base;
+  const p = c.deal_in_prob * 100;
+  const pTxt = p >= 10 ? p.toFixed(0) : p.toFixed(1);
+  return `${base} Trained model: deals in ${pTxt}% of the time from here.`;
 }
 
 function tellFor(threat: number, suits: Record<string, number>): [string, string] {

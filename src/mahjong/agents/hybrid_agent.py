@@ -20,6 +20,7 @@ reveals information to opponents.
 from mahjong.game import BaseAgent
 from mahjong.hand import evaluate_discards, calculate_shanten, best_chow_option
 from mahjong.defense import estimate_danger
+from mahjong.opponent_model import estimate_opponent_threats
 
 
 class HybridAgent(BaseAgent):
@@ -102,9 +103,20 @@ class HybridAgent(BaseAgent):
         best_pair, _ = best_chow_option(counts, hand.num_exposed_melds, options)
         return best_pair
 
+    def danger_for(self, tile_id: int, player_idx: int, game_state,
+                   threat_data, visible) -> float:
+        """Danger estimate for one candidate discard, in [0, 1].
+
+        Subclass hook: LearnedAgent overrides this with a model trained
+        on simulated deal-in outcomes; the base class uses the
+        hand-tuned heuristic blend from defense.py.
+        """
+        return estimate_danger(tile_id, player_idx, game_state, threat_data)
+
     def choose_discard(self, player_idx: int, game_state) -> int:
         hand = game_state.hands[player_idx]
         visible = game_state.get_visible_counts(player_idx)
+        threat_data = estimate_opponent_threats(player_idx, game_state)
 
         # Get current shanten for dynamic weight adjustment
         current_shanten = calculate_shanten(hand.copy_counts(), hand.num_exposed_melds)
@@ -143,7 +155,8 @@ class HybridAgent(BaseAgent):
         defense_scores = {}
         for e in offense_evals:
             tid = e["tile_id"]
-            danger = estimate_danger(tid, player_idx, game_state)
+            danger = self.danger_for(tid, player_idx, game_state,
+                                     threat_data, visible)
             # Invert: low danger = high safety score
             defense_scores[tid] = 1.0 - danger
 

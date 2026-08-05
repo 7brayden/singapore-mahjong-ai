@@ -9,13 +9,16 @@ from fastapi import WebSocket
 
 from mahjong.interactive import InteractiveGame
 from mahjong.scoring import ScoreConfig
-from mahjong.agents import RandomAgent, GreedyAgent, DefensiveAgent, HybridAgent
+from mahjong.agents import (
+    RandomAgent, GreedyAgent, DefensiveAgent, HybridAgent, LearnedAgent,
+)
 
 BOT_TYPES = {
     "random": RandomAgent,
     "greedy": GreedyAgent,
     "defensive": DefensiveAgent,
     "hybrid": HybridAgent,
+    "learned": LearnedAgent,
 }
 
 
@@ -67,7 +70,10 @@ class GameManager:
             if name not in BOT_TYPES:
                 raise ValueError(f"Unknown bot type {name!r}; "
                                  f"choose from {sorted(BOT_TYPES)}")
-            agents.append(BOT_TYPES[name](f"{name.title()}-{i}"))
+            try:
+                agents.append(BOT_TYPES[name](f"{name.title()}-{i}"))
+            except RuntimeError as exc:  # e.g. learned bot, model not trained
+                raise ValueError(str(exc))
 
         config = ScoreConfig(tai_cap=tai_cap, base_unit=base_unit)
         interactive = InteractiveGame(agents, human_seats={human_seat},

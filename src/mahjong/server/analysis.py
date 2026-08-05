@@ -12,6 +12,13 @@ from mahjong.game import GameState
 from mahjong.hand import calculate_shanten, evaluate_discards, get_winning_tiles
 from mahjong.defense import estimate_danger_detailed
 from mahjong.opponent_model import estimate_opponent_threats
+from mahjong.ml.features import danger_features
+from mahjong.ml.model import load_danger_model
+
+# Trained deal-in model (None until the ML pipeline has been run once).
+# Unlike the heuristic danger score, its output is a calibrated
+# probability: "this discard deals in X% of the time".
+_danger_model = load_danger_model()
 
 
 def analyze_seat(game: GameState, seat: int) -> Dict:
@@ -38,7 +45,7 @@ def analyze_seat(game: GameState, seat: int) -> Dict:
         discards = []
         for e in evals:
             danger = estimate_danger_detailed(e["tile_id"], seat, game, threat_data)
-            discards.append({
+            entry = {
                 "tile": e["tile_id"],
                 "shanten_after": e["shanten"],
                 "acceptance": e["acceptance"],
@@ -46,7 +53,11 @@ def analyze_seat(game: GameState, seat: int) -> Dict:
                 "danger": round(danger["danger"], 3),
                 "danger_components": {k: round(v, 3)
                                       for k, v in danger["components"].items()},
-            })
+            }
+            if _danger_model is not None:
+                x = danger_features(e["tile_id"], seat, game, visible, threat_data)
+                entry["deal_in_prob"] = round(_danger_model.predict(x), 4)
+            discards.append(entry)
         analysis["discards"] = discards
     elif shanten == 0:
         analysis["waiting_on"] = get_winning_tiles(

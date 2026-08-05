@@ -70,6 +70,8 @@ export interface DiscardAnalysis {
     opponent_threat: number;
     suit_safety: number;
   };
+  /** Calibrated P(deal-in) from the trained model; absent if untrained. */
+  deal_in_prob?: number;
 }
 
 export interface OpponentAnalysis {
