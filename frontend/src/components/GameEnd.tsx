@@ -1,6 +1,6 @@
 import type { GameView, ResultView } from "../api";
 import { seatChar, tileFace } from "../tiles";
-import { fmtMoney, fmtSigned } from "../money";
+import { fmtPoints } from "../format";
 import { TileView } from "./Tile";
 
 // Engine labels look like "Half flush (混一色)" — split for the receipt.
@@ -56,7 +56,6 @@ export function GameEnd({ view, result, displayNames, handNumber,
   };
 
   const score = result.score;
-  const chipsWon = score ? score.value : 0;
 
   return (
     <div className="end-overlay">
@@ -72,8 +71,9 @@ export function GameEnd({ view, result, displayNames, handNumber,
               <div className="end-tai">
                 <div className="big">{score.tai} tai{score.is_limit ? " ·限" : ""}</div>
                 <div className="small">
-                  {fmtMoney(chipsWon)}
-                  {result.win_type === "tsumo" ? " from each player" : " × 3 from the shooter"}
+                  {result.win_type === "tsumo"
+                    ? "collects from all three players"
+                    : "shooter pays all three shares"}
                 </div>
               </div>
             )}
@@ -108,7 +108,7 @@ export function GameEnd({ view, result, displayNames, handNumber,
                 })}
                 <div className="receipt-total">
                   <span>Total</span>
-                  <span>{score.tai} tai → {fmtMoney(chipsWon)}</span>
+                  <span>{score.tai} tai</span>
                 </div>
               </>
             ) : (
@@ -128,9 +128,9 @@ export function GameEnd({ view, result, displayNames, handNumber,
                     <span className="seat-char zh">{seatChar(p.seat_wind)}</span>
                     <span className="payment-name">{displayNames[p.seat]}</span>
                     <span className={`payment-delta ${delta >= 0 ? "pos" : "neg"}`}>
-                      {fmtSigned(delta)}
+                      {fmtPoints(delta)}
                     </span>
-                    <span className="payment-total">{fmtSigned(ledgerAfter[p.seat])}</span>
+                    <span className="payment-total">{fmtPoints(ledgerAfter[p.seat])}</span>
                   </div>
                 );
               })}

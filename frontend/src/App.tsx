@@ -25,7 +25,7 @@ function parseSeed(text: string): number | null {
 
 export default function App() {
   const [config, setConfig] = useState<SetupConfig>({
-    humanSeat: 1, rate: 20, taiCap: 6, seedText: "", personas: [], coachOn: true,
+    humanSeat: 1, taiCap: 6, seedText: "", personas: [], coachOn: true,
   });
   const [phase, setPhase] = useState<"setup" | "playing">("setup");
   const [gameId, setGameId] = useState<string | null>(null);
@@ -78,7 +78,6 @@ export default function App() {
         human_seat: cfg.humanSeat,
         bots,
         tai_cap: cfg.taiCap,
-        base_unit: cfg.rate,   // engine units are cents
       });
       socketRef.current?.close();
       ledgerAppliedFor.current = null;
@@ -272,7 +271,7 @@ export default function App() {
     return "An opponent";
   })();
 
-  // Engine payments are already in chips (base_unit is server-side)
+  // Engine payments are in points (base unit 1)
   const chipsFor = (seat: number) => ledger[seat] + (view.players[seat].chips ?? 0);
 
   const ledgerAfter = view.result

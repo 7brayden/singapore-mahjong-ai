@@ -1,9 +1,7 @@
 import { useState } from "react";
-import { fmtMoney } from "../money";
 
 export interface SetupConfig {
   humanSeat: number;          // 0 = East (dealer), 1 = South, ...
-  rate: number;               // cents a 1-tai win pays (engine base_unit)
   taiCap: number;             // scoring limit
   seedText: string;
   personas: string[];         // by table seat, human's entry is the hint bot
@@ -32,9 +30,7 @@ const SEATS = [
   { char: "西", name: "West", tag: null },
   { char: "北", name: "North", tag: null },
 ];
-// Rate in cents: what a 1-tai win pays. A "20" game is a 20-cent game.
-const RATE_OPTIONS = [10, 20, 50, 100];
-const CAP_OPTIONS = [3, 4, 5, 6];
+const CAP_OPTIONS = [5, 6, 7, 8, 9, 10];
 
 /** Bot seats in visual order right / across / left of the human. */
 export function botSeats(humanSeat: number): number[] {
@@ -51,7 +47,6 @@ interface SetupProps {
 
 export function Setup({ initial, error, busy, onDeal }: SetupProps) {
   const [humanSeat, setHumanSeat] = useState(initial.humanSeat);
-  const [rate, setRate] = useState(initial.rate);
   const [taiCap, setTaiCap] = useState(initial.taiCap);
   const [seedText, setSeedText] = useState(initial.seedText);
   const [coachOn, setCoachOn] = useState(initial.coachOn);
@@ -60,7 +55,6 @@ export function Setup({ initial, error, busy, onDeal }: SetupProps) {
 
   const randomize = () => {
     setHumanSeat(Math.floor(Math.random() * 4));
-    setRate(RATE_OPTIONS[Math.floor(Math.random() * RATE_OPTIONS.length)]);
     setSeedText("");
     setBotPersonas([0, 1, 2].map(() => PERSONAS[Math.floor(Math.random() * PERSONAS.length)].id));
   };
@@ -70,7 +64,7 @@ export function Setup({ initial, error, busy, onDeal }: SetupProps) {
     botSeats(humanSeat).forEach((seat, i) => {
       personas[seat] = botPersonas[i];
     });
-    onDeal({ humanSeat, rate, taiCap, seedText: seedText.trim(), personas, coachOn });
+    onDeal({ humanSeat, taiCap, seedText: seedText.trim(), personas, coachOn });
   };
 
   return (
@@ -109,25 +103,9 @@ export function Setup({ initial, error, busy, onDeal }: SetupProps) {
             </div>
             <div>
               <div className="section-label field-label">
-                Rate <span className="field-hint">— what a 1-tai win pays</span>
+                Tai limit <span className="field-hint">— hands cap out here (满)</span>
               </div>
-              <div className="stakes-grid">
-                {RATE_OPTIONS.map((r) => (
-                  <button
-                    key={r}
-                    className={`option-card${rate === r ? " selected" : ""}`}
-                    onClick={() => setRate(r)}
-                  >
-                    {fmtMoney(r)}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div>
-              <div className="section-label field-label">
-                Tai limit <span className="field-hint">— payouts stop doubling here</span>
-              </div>
-              <div className="stakes-grid">
+              <div className="cap-grid">
                 {CAP_OPTIONS.map((cap) => (
                   <button
                     key={cap}
@@ -137,27 +115,6 @@ export function Setup({ initial, error, busy, onDeal }: SetupProps) {
                     {cap} tai
                   </button>
                 ))}
-              </div>
-            </div>
-            <div className="payout-card">
-              <div className="section-label" style={{ marginBottom: 8 }}>Payouts</div>
-              {Array.from({ length: taiCap }, (_, i) => {
-                const tai = i + 1;
-                const pay = rate * 2 ** (tai - 1);
-                const isLimit = tai === taiCap;
-                return (
-                  <div key={tai} className={`payout-row${isLimit ? " limit" : ""}`}>
-                    <span>
-                      {tai} tai
-                      {isLimit && <span className="limit-tag">limit 满</span>}
-                    </span>
-                    <span className="mono">{fmtMoney(pay)}</span>
-                  </div>
-                );
-              })}
-              <div className="payout-footnote">
-                Self-draw collects this from all three players · on a discard the
-                shooter pays all three shares alone.
               </div>
             </div>
             <div>

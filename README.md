@@ -108,7 +108,7 @@ Melds - completed sets of 3 or 4 tiles.
 
 ## Scoring (tai)
 
-Every win is scored as a list of named tai items (`scoring.py`), so the UI can show players exactly why a hand is worth what it is. Chip value doubles per tai: `base_unit × 2^(tai−1)`, capped at the tai limit (default 6). Both the base amount and the limit are set per game — the setup screen shows the resulting payout chart.
+Every win is scored as a list of named tai items (`scoring.py`), so the UI can show players exactly why a hand is worth what it is. Point value doubles per tai (`2^(tai−1)`), capped at the tai limit — set per game in the setup screen (5-10, default 6).
 
 | Rule | Tai |
 |---|---|
