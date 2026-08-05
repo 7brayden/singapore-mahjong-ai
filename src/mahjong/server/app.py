@@ -42,6 +42,8 @@ class CreateGameRequest(BaseModel):
     seed: Optional[int] = None
     human_seat: int = 0
     bots: Optional[List[str]] = None  # 4 entries; human seat's bot gives hints
+    tai_cap: int = 6                  # scoring limit (payments double per tai)
+    base_unit: int = 1                # chips a 1-tai hand is worth
 
 
 class ActionRequest(BaseModel):
@@ -82,7 +84,8 @@ def tiles():
 async def create_game(req: CreateGameRequest):
     try:
         managed = manager.create(seed=req.seed, human_seat=req.human_seat,
-                                 bots=req.bots)
+                                 bots=req.bots, tai_cap=req.tai_cap,
+                                 base_unit=req.base_unit)
     except ValueError as exc:
         raise HTTPException(400, str(exc))
     return {"game_id": managed.game_id, "view": managed.view()}

@@ -51,13 +51,28 @@ def test_chicken_hand_scores_zero():
 
 def test_all_triplets_half_flush_stack_and_cap():
     # Pongs of 1w/3w/5w/Rd + 7w pair, self-drawn, no flowers:
-    # all_triplets 2 + half_flush 2 + dragon 1 + self_draw 1 + no_bonus 1 = 7 → cap 5
+    # all_triplets 2 + half_flush 2 + dragon 1 + self_draw 1 + no_bonus 1 = 7 → cap 6
     hand = make_hand([0, 0, 0, 2, 2, 2, 4, 4, 4, 31, 31, 31, 6, 6])
     score = score_win(hand, 4, True, 0, WIND_START, CFG)
     assert score.total_tai == 7
-    assert score.tai == 5
+    assert score.tai == 6
     assert score.is_limit
+    assert score.value == 32
+
+
+def test_tai_cap_is_configurable():
+    cfg = ScoreConfig(tai_cap=5)
+    hand = make_hand([0, 0, 0, 2, 2, 2, 4, 4, 4, 31, 31, 31, 6, 6])
+    score = score_win(hand, 4, True, 0, WIND_START, cfg)
+    assert score.tai == 5
     assert score.value == 16
+
+
+def test_base_unit_scales_values():
+    cfg = ScoreConfig(base_unit=5)
+    hand = make_hand([0, 1, 2, 3, 4, 5, 9, 10, 11, 21, 22, 23, 25, 25])
+    score = score_win(hand, 2, False, 0, WIND_START, cfg)  # ping hu, 4 tai
+    assert score.value == 5 * 2 ** 3  # 40 chips
 
 
 def test_full_flush():

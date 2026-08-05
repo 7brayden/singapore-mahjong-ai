@@ -2,7 +2,8 @@ import { useState } from "react";
 
 export interface SetupConfig {
   humanSeat: number;          // 0 = East (dealer), 1 = South, ...
-  stakes: number;             // chips per base unit
+  baseUnit: number;           // chips a 1-tai hand is worth (engine-side)
+  taiCap: number;             // scoring limit
   seedText: string;
   personas: string[];         // by table seat, human's entry is the hint bot
   coachOn: boolean;
@@ -30,7 +31,8 @@ const SEATS = [
   { char: "西", name: "West", tag: null },
   { char: "北", name: "North", tag: null },
 ];
-const STAKES = [1, 2, 5, 10];
+const BASE_OPTIONS = [1, 2, 5, 10];
+const CAP_OPTIONS = [3, 4, 5, 6];
 
 /** Bot seats in visual order right / across / left of the human. */
 export function botSeats(humanSeat: number): number[] {
@@ -47,7 +49,8 @@ interface SetupProps {
 
 export function Setup({ initial, error, busy, onDeal }: SetupProps) {
   const [humanSeat, setHumanSeat] = useState(initial.humanSeat);
-  const [stakes, setStakes] = useState(initial.stakes);
+  const [baseUnit, setBaseUnit] = useState(initial.baseUnit);
+  const [taiCap, setTaiCap] = useState(initial.taiCap);
   const [seedText, setSeedText] = useState(initial.seedText);
   const [coachOn, setCoachOn] = useState(initial.coachOn);
   // Personas for the three bot cards (visual order right/across/left)
@@ -55,7 +58,7 @@ export function Setup({ initial, error, busy, onDeal }: SetupProps) {
 
   const randomize = () => {
     setHumanSeat(Math.floor(Math.random() * 4));
-    setStakes(STAKES[Math.floor(Math.random() * STAKES.length)]);
+    setBaseUnit(BASE_OPTIONS[Math.floor(Math.random() * BASE_OPTIONS.length)]);
     setSeedText("");
     setBotPersonas([0, 1, 2].map(() => PERSONAS[Math.floor(Math.random() * PERSONAS.length)].id));
   };
@@ -65,7 +68,7 @@ export function Setup({ initial, error, busy, onDeal }: SetupProps) {
     botSeats(humanSeat).forEach((seat, i) => {
       personas[seat] = botPersonas[i];
     });
-    onDeal({ humanSeat, stakes, seedText: seedText.trim(), personas, coachOn });
+    onDeal({ humanSeat, baseUnit, taiCap, seedText: seedText.trim(), personas, coachOn });
   };
 
   return (
@@ -103,17 +106,56 @@ export function Setup({ initial, error, busy, onDeal }: SetupProps) {
               </div>
             </div>
             <div>
-              <div className="section-label field-label">Stakes</div>
+              <div className="section-label field-label">
+                Base amount <span className="field-hint">— chips a 1-tai win pays</span>
+              </div>
               <div className="stakes-grid">
-                {STAKES.map((s) => (
+                {BASE_OPTIONS.map((b) => (
                   <button
-                    key={s}
-                    className={`option-card${stakes === s ? " selected" : ""}`}
-                    onClick={() => setStakes(s)}
+                    key={b}
+                    className={`option-card${baseUnit === b ? " selected" : ""}`}
+                    onClick={() => setBaseUnit(b)}
                   >
-                    {s} chip{s === 1 ? " / tai" : "s"}
+                    {b} chip{b === 1 ? "" : "s"}
                   </button>
                 ))}
+              </div>
+            </div>
+            <div>
+              <div className="section-label field-label">
+                Tai limit <span className="field-hint">— payouts stop doubling here</span>
+              </div>
+              <div className="stakes-grid">
+                {CAP_OPTIONS.map((cap) => (
+                  <button
+                    key={cap}
+                    className={`option-card${taiCap === cap ? " selected" : ""}`}
+                    onClick={() => setTaiCap(cap)}
+                  >
+                    {cap} tai
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="payout-card">
+              <div className="section-label" style={{ marginBottom: 8 }}>Payouts</div>
+              {Array.from({ length: taiCap }, (_, i) => {
+                const tai = i + 1;
+                const chips = baseUnit * 2 ** (tai - 1);
+                const isLimit = tai === taiCap;
+                return (
+                  <div key={tai} className={`payout-row${isLimit ? " limit" : ""}`}>
+                    <span>
+                      {tai} tai
+                      {isLimit && <span className="limit-tag">limit 满</span>}
+                    </span>
+                    <span className="mono">{chips} chip{chips === 1 ? "" : "s"}</span>
+                  </div>
+                );
+              })}
+              <div className="payout-footnote">
+                Self-draw collects this from all three players · on a discard the
+                shooter pays all three shares alone.
               </div>
             </div>
             <div>

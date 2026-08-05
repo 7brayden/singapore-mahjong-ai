@@ -25,7 +25,7 @@ function parseSeed(text: string): number | null {
 
 export default function App() {
   const [config, setConfig] = useState<SetupConfig>({
-    humanSeat: 1, stakes: 1, seedText: "", personas: [], coachOn: true,
+    humanSeat: 1, baseUnit: 1, taiCap: 6, seedText: "", personas: [], coachOn: true,
   });
   const [phase, setPhase] = useState<"setup" | "playing">("setup");
   const [gameId, setGameId] = useState<string | null>(null);
@@ -77,6 +77,8 @@ export default function App() {
         seed: baseSeed === null ? null : baseSeed + (hand - 1),
         human_seat: cfg.humanSeat,
         bots,
+        tai_cap: cfg.taiCap,
+        base_unit: cfg.baseUnit,
       });
       socketRef.current?.close();
       ledgerAppliedFor.current = null;
@@ -270,11 +272,11 @@ export default function App() {
     return "An opponent";
   })();
 
-  const chipsFor = (seat: number) =>
-    ledger[seat] + (view.players[seat].chips ?? 0) * config.stakes;
+  // Engine payments are already in chips (base_unit is server-side)
+  const chipsFor = (seat: number) => ledger[seat] + (view.players[seat].chips ?? 0);
 
   const ledgerAfter = view.result
-    ? ledger.map((chips, seat) => chips + (view.result!.payments[seat] ?? 0) * config.stakes)
+    ? ledger.map((chips, seat) => chips + (view.result!.payments[seat] ?? 0))
     : ledger;
 
   const applyLedgerAndAdvance = () => {
@@ -346,7 +348,6 @@ export default function App() {
           result={view.result}
           displayNames={displayNames}
           handNumber={handNumber}
-          stakes={config.stakes}
           ledgerAfter={ledgerAfter}
           onNextHand={() => { applyLedgerAndAdvance(); onNextHand(); }}
           onEndSession={() => { applyLedgerAndAdvance(); onEndSession(); }}

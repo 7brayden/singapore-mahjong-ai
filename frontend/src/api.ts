@@ -111,6 +111,8 @@ export function createGame(body: {
   seed?: number | null;
   human_seat?: number;
   bots?: string[];
+  tai_cap?: number;
+  base_unit?: number;
 }): Promise<{ game_id: string; view: GameView }> {
   return request("POST", "/games", body);
 }

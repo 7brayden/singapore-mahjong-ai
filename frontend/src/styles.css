@@ -749,6 +749,34 @@ button.hand-tile { cursor: default; }
 .seed-field input::placeholder { color: var(--text-muted); }
 .seed-field .divider { width: 1px; height: 18px; background: rgba(255, 255, 255, 0.12); }
 .seed-field .note { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+.payout-card {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+.payout-row {
+  display: flex; align-items: baseline; justify-content: space-between;
+  padding: 6px 0;
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.08);
+  font-size: 12.5px;
+}
+.payout-row .mono { font-size: 12px; color: var(--accent-tint-text); }
+.payout-row.limit { border-bottom: none; }
+.payout-row.limit > span:first-child { color: var(--accent-tint-text); }
+.limit-tag {
+  margin-left: 8px;
+  font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--accent-700);
+  border: 1px solid rgba(232, 172, 61, 0.35);
+  border-radius: 999px; padding: 1px 6px;
+}
+.payout-footnote {
+  font-size: 10.5px; color: var(--text-muted); line-height: 1.5;
+  margin-top: 8px; padding-top: 8px;
+  border-top: 1px solid var(--hairline);
+}
+
 .coach-toggle-card {
   background: rgba(217, 154, 43, 0.08);
   border: 1px solid rgba(217, 154, 43, 0.22);

@@ -108,7 +108,7 @@ Melds - completed sets of 3 or 4 tiles.
 
 ## Scoring (tai)
 
-Every win is scored as a list of named tai items (`scoring.py`), so the UI can show players exactly why a hand is worth what it is. Chip value doubles per tai: `base_unit × 2^(tai−1)`, capped at 5 tai (the limit).
+Every win is scored as a list of named tai items (`scoring.py`), so the UI can show players exactly why a hand is worth what it is. Chip value doubles per tai: `base_unit × 2^(tai−1)`, capped at the tai limit (default 6). Both the base amount and the limit are set per game — the setup screen shows the resulting payout chart.
 
 | Rule | Tai |
 |---|---|
@@ -123,7 +123,7 @@ Every win is scored as a list of named tai items (`scoring.py`), so the UI can s
 | Little three dragons (小三元) | +2 over the dragon pongs |
 | Full flush (清一色) | 4 |
 | Ping Hu — all chows, no bonus tiles (平胡) | 4 |
-| Big three dragons, four winds, all honors, all terminals | limit (5) |
+| Big three dragons, four winds, all honors, all terminals | limit (6 by default) |
 
 House rules live in `ScoreConfig` and are all adjustable: minimum 1 tai to win (chicken hands blocked by default), shooter pays all three shares on a ron, tsumo collects from everyone, animals/completed flower series pay out instantly when drawn, and kongs collect instantly too (1 base unit from each player, 2 for a concealed kong). Special hands (thirteen orphans, heaven/earth wins) are not yet implemented.
 

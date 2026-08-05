@@ -8,6 +8,7 @@ from typing import Dict, List, Optional
 from fastapi import WebSocket
 
 from mahjong.interactive import InteractiveGame
+from mahjong.scoring import ScoreConfig
 from mahjong.agents import RandomAgent, GreedyAgent, DefensiveAgent, HybridAgent
 
 BOT_TYPES = {
@@ -49,9 +50,14 @@ class GameManager:
         self.games: Dict[str, ManagedGame] = {}
 
     def create(self, seed: Optional[int] = None, human_seat: int = 0,
-               bots: Optional[List[str]] = None) -> ManagedGame:
+               bots: Optional[List[str]] = None,
+               tai_cap: int = 6, base_unit: int = 1) -> ManagedGame:
         if not 0 <= human_seat <= 3:
             raise ValueError("human_seat must be 0-3")
+        if not 1 <= tai_cap <= 13:
+            raise ValueError("tai_cap must be between 1 and 13")
+        if not 1 <= base_unit <= 1000:
+            raise ValueError("base_unit must be between 1 and 1000")
         names = bots or ["hybrid"] * 4
         if len(names) != 4:
             raise ValueError("bots must list exactly 4 agent types")
@@ -63,7 +69,9 @@ class GameManager:
                                  f"choose from {sorted(BOT_TYPES)}")
             agents.append(BOT_TYPES[name](f"{name.title()}-{i}"))
 
-        interactive = InteractiveGame(agents, human_seats={human_seat}, seed=seed)
+        config = ScoreConfig(tai_cap=tai_cap, base_unit=base_unit)
+        interactive = InteractiveGame(agents, human_seats={human_seat},
+                                      seed=seed, score_config=config)
         game_id = uuid.uuid4().hex[:12]
         managed = ManagedGame(game_id, interactive, human_seat)
         self.games[game_id] = managed

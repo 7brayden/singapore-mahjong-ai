@@ -91,7 +91,7 @@ class ScoreConfig:
     """House rules for scoring and payments."""
 
     min_tai: int = 1                 # minimum tai for a legal win
-    tai_cap: int = 5                 # limit; payments stop doubling here
+    tai_cap: int = 6                 # limit; payments stop doubling here
     base_unit: int = 1               # chip value of a 1-tai hand
     allow_chicken_hand: bool = False # may a 0-tai hand win?
     shooter_pays_all: bool = True    # ron: discarder pays all three shares

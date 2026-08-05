@@ -75,6 +75,23 @@ def test_bad_create_requests_return_400():
     assert client.post("/games", json={
         "bots": ["hybrid", "hybrid", "alphazero", "greedy"]}).status_code == 400
     assert client.post("/games", json={"human_seat": 7}).status_code == 400
+    assert client.post("/games", json={"tai_cap": 0}).status_code == 400
+    assert client.post("/games", json={"base_unit": 0}).status_code == 400
+
+
+def test_scoring_config_passthrough():
+    from mahjong.server.app import manager
+
+    data = create()
+    game_id = client.post("/games", json={
+        "seed": 1, "tai_cap": 5, "base_unit": 5}).json()["game_id"]
+    config = manager.get(game_id).interactive.game.score_config
+    assert config.tai_cap == 5
+    assert config.base_unit == 5
+    # Defaults: 6-tai limit, 1-chip base
+    default_config = manager.get(data["game_id"]).interactive.game.score_config
+    assert default_config.tai_cap == 6
+    assert default_config.base_unit == 1
 
 
 def test_analysis_payload():

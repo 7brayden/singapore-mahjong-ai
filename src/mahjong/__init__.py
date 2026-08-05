@@ -1,3 +1,3 @@
 """Singapore Mahjong engine, AI agents, and discard advisor."""
 
-__version__ = "0.8.0"
+__version__ = "0.8.1"

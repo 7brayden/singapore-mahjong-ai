@@ -13,13 +13,12 @@ interface GameEndProps {
   result: ResultView;
   displayNames: string[];
   handNumber: number;
-  stakes: number;
   ledgerAfter: number[];
   onNextHand: () => void;
   onEndSession: () => void;
 }
 
-export function GameEnd({ view, result, displayNames, handNumber, stakes,
+export function GameEnd({ view, result, displayNames, handNumber,
                           ledgerAfter, onNextHand, onEndSession }: GameEndProps) {
   const humanWon = result.winner === view.seat;
   const isDraw = result.winner === null;
@@ -56,7 +55,7 @@ export function GameEnd({ view, result, displayNames, handNumber, stakes,
   };
 
   const score = result.score;
-  const chipsWon = score ? score.value * stakes : 0;
+  const chipsWon = score ? score.value : 0;
 
   return (
     <div className="end-overlay">
@@ -121,7 +120,7 @@ export function GameEnd({ view, result, displayNames, handNumber, stakes,
             <div className="section-label">Chip payments</div>
             <div className="payments-list">
               {view.players.map((p) => {
-                const delta = (result.payments[p.seat] ?? 0) * stakes;
+                const delta = result.payments[p.seat] ?? 0;
                 const isWinner = result.winner === p.seat;
                 return (
                   <div key={p.seat} className={`payment-row${isWinner ? " winner" : ""}`}>
