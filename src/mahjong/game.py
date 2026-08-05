@@ -755,6 +755,22 @@ def run_decision(game: GameState, gen):
         return stop.value
 
 
+def advance_turns(game: GameState, turns: int) -> None:
+    """Play a game forward to roughly `turns` turns, agents answering.
+
+    Stops mid-game so the position can be inspected — discard histories,
+    threat estimates, danger scores. Used by the module demos and by any
+    tooling that needs realistic mid-game states rather than finished ones.
+    """
+    gen = game.step_game()
+    try:
+        request = next(gen)
+        while game.turn < turns:
+            request = gen.send(game.dispatch_to_agent(request))
+    except StopIteration:
+        pass  # game finished before reaching the turn count
+
+
 # ══════════════════════════════════════════════════════════════════════
 # QUICK TEST
 # ══════════════════════════════════════════════════════════════════════

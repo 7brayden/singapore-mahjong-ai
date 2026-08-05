@@ -347,7 +347,6 @@ export default function App() {
           result={view.result}
           displayNames={displayNames}
           handNumber={handNumber}
-          ledgerAfter={ledgerAfter}
           onNextHand={() => { applyLedgerAndAdvance(); onNextHand(); }}
           onEndSession={() => { applyLedgerAndAdvance(); onEndSession(); }}
         />

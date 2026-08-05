@@ -658,7 +658,7 @@ button.hand-tile { cursor: default; }
 .end-tai .big { font-family: "DM Mono", monospace; font-size: 38px; color: var(--accent-tint-text); line-height: 1; }
 .end-tai .small { font-size: 12px; color: var(--text-secondary); margin-top: 6px; }
 .end-hand { display: flex; gap: 4px; margin-top: 20px; flex-wrap: wrap; }
-.end-body { display: grid; grid-template-columns: 1fr 260px; gap: 30px; padding: 24px 32px; }
+.end-body { padding: 24px 32px; }
 .receipt-row {
   display: flex; align-items: baseline; justify-content: space-between;
   padding: 11px 0;
@@ -668,22 +668,6 @@ button.hand-tile { cursor: default; }
 .receipt-zh { font-size: 13px; color: #9aa8ae; margin-left: 8px; font-family: "Noto Sans SC", sans-serif; }
 .receipt-tai { font-family: "DM Mono", monospace; font-size: 14px; color: var(--accent-tint-text); }
 .receipt-total { display: flex; justify-content: space-between; padding: 14px 0 0; font-family: "DM Mono", monospace; font-size: 18px; }
-.payments-list { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
-.payment-row {
-  display: flex; align-items: center; gap: 8px;
-  border-radius: 10px; padding: 10px 12px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-.payment-row.winner {
-  background: rgba(111, 174, 127, 0.12);
-  border-color: rgba(111, 174, 127, 0.3);
-}
-.payment-name { font-size: 13px; flex: 1; }
-.payment-delta { font-family: "DM Mono", monospace; font-size: 14px; }
-.payment-delta.pos { color: var(--safe-text); }
-.payment-delta.neg { color: var(--danger-text); }
-.payment-total { font-family: "DM Mono", monospace; font-size: 11px; color: var(--text-muted); width: 58px; text-align: right; }
 .end-footer { display: flex; gap: 12px; align-items: center; padding: 8px 32px 28px; }
 .end-footer .btn-accent { flex: 1; padding: 16px; border-radius: 12px; font-size: 16px; font-weight: 700; }
 .end-footer .btn-ghost { flex: 1; padding: 16px; border-radius: 12px; font-size: 16px; }

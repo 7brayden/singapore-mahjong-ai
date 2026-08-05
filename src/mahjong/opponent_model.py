@@ -204,7 +204,7 @@ def tile_threat_score(tile_id: int, player_idx: int, game_state,
 if __name__ == "__main__":
     import random
 
-    from mahjong.game import GameState, BaseAgent
+    from mahjong.game import GameState, BaseAgent, advance_turns
     from mahjong.tiles import hand_to_str
 
     class _RandomAgent(BaseAgent):
@@ -218,10 +218,7 @@ if __name__ == "__main__":
     game.setup()
 
     # Simulate 35 turns
-    for _ in range(35):
-        if game.game_over:
-            break
-        game._execute_turn()
+    advance_turns(game, 35)
 
     print(f"Turn: {game.turn}, Wall remaining: {game.tiles_remaining}\n")
 

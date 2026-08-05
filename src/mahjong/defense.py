@@ -240,7 +240,7 @@ def evaluate_danger_all(
 if __name__ == "__main__":
     import random
 
-    from mahjong.game import GameState, BaseAgent
+    from mahjong.game import GameState, BaseAgent, advance_turns
 
     class _RandomAgent(BaseAgent):
         def choose_discard(self, player_idx, game_state):
@@ -254,10 +254,7 @@ if __name__ == "__main__":
     game.setup()
 
     # Simulate 30 turns to build up discard history
-    for _ in range(30):
-        if game.game_over:
-            break
-        game._execute_turn()
+    advance_turns(game, 30)
 
     print(f"Turn: {game.turn}, Wall remaining: {game.tiles_remaining}")
     print(f"P0 hand: {', '.join(tile_short(t) for t in sorted(game.hands[0].tiles))}")

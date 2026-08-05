@@ -1,6 +1,5 @@
 import type { GameView, ResultView } from "../api";
-import { seatChar, tileFace } from "../tiles";
-import { fmtPoints } from "../format";
+import { tileFace } from "../tiles";
 import { TileView } from "./Tile";
 
 // Engine labels look like "Half flush (混一色)" — split for the receipt.
@@ -14,13 +13,12 @@ interface GameEndProps {
   result: ResultView;
   displayNames: string[];
   handNumber: number;
-  ledgerAfter: number[];
   onNextHand: () => void;
   onEndSession: () => void;
 }
 
 export function GameEnd({ view, result, displayNames, handNumber,
-                          ledgerAfter, onNextHand, onEndSession }: GameEndProps) {
+                          onNextHand, onEndSession }: GameEndProps) {
   const humanWon = result.winner === view.seat;
   const isDraw = result.winner === null;
   const winnerName = result.winner !== null ? displayNames[result.winner] : "";
@@ -116,25 +114,6 @@ export function GameEnd({ view, result, displayNames, handNumber,
                 {isDraw ? "No winning hand this round." : "Chicken hand — no scoring elements."}
               </div>
             )}
-          </div>
-          <div>
-            <div className="section-label">Chip payments</div>
-            <div className="payments-list">
-              {view.players.map((p) => {
-                const delta = result.payments[p.seat] ?? 0;
-                const isWinner = result.winner === p.seat;
-                return (
-                  <div key={p.seat} className={`payment-row${isWinner ? " winner" : ""}`}>
-                    <span className="seat-char zh">{seatChar(p.seat_wind)}</span>
-                    <span className="payment-name">{displayNames[p.seat]}</span>
-                    <span className={`payment-delta ${delta >= 0 ? "pos" : "neg"}`}>
-                      {fmtPoints(delta)}
-                    </span>
-                    <span className="payment-total">{fmtPoints(ledgerAfter[p.seat])}</span>
-                  </div>
-                );
-              })}
-            </div>
           </div>
         </div>
         <div className="end-footer">
