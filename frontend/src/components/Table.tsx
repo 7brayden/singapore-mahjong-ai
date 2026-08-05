@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { GameView, PlayerView } from "../api";
 import { seatChar, seatName, tileFace } from "../tiles";
+import { fmtSigned } from "../money";
 import { TileView, BonusChip, FaceDownSlivers } from "./Tile";
 
 // Visual placement relative to the human seat: the previous player sits
@@ -30,7 +31,7 @@ function SeatPanel({ player, displayName, persona, isDealer, chips, tell, north 
       <span className="seat-name">{displayName}</span>
       <span className="persona-badge">{persona}</span>
       {isDealer && <span className="dealer-chip">Dealer</span>}
-      <span className="seat-chips">{chips} chips</span>
+      <span className="seat-chips">{fmtSigned(chips)}</span>
     </div>
   );
   const facedown = (
@@ -203,7 +204,7 @@ function HumanArea({ view, chips, yourDiscardTurn, drawnTile, dangerByTile,
             <span className="human-seat-char">{seatChar(me.seat_wind)}</span>
             <span className="human-name">You · {seatName(me.seat_wind)}</span>
             {me.exposed.length === 0 && <span className="concealed-badge">Concealed</span>}
-            <span className="human-chips">{chips} chips</span>
+            <span className="human-chips">{fmtSigned(chips)}</span>
             {me.exposed.length > 0 && (
               <span className="meld-row">
                 {me.exposed.map(([, tiles], i) => (

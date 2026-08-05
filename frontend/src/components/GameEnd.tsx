@@ -1,5 +1,6 @@
 import type { GameView, ResultView } from "../api";
 import { seatChar, tileFace } from "../tiles";
+import { fmtMoney, fmtSigned } from "../money";
 import { TileView } from "./Tile";
 
 // Engine labels look like "Half flush (混一色)" — split for the receipt.
@@ -71,8 +72,8 @@ export function GameEnd({ view, result, displayNames, handNumber,
               <div className="end-tai">
                 <div className="big">{score.tai} tai{score.is_limit ? " ·限" : ""}</div>
                 <div className="small">
-                  {chipsWon} chip{chipsWon === 1 ? "" : "s"}
-                  {result.win_type === "tsumo" ? " per player" : " from the shooter"}
+                  {fmtMoney(chipsWon)}
+                  {result.win_type === "tsumo" ? " from each player" : " × 3 from the shooter"}
                 </div>
               </div>
             )}
@@ -107,7 +108,7 @@ export function GameEnd({ view, result, displayNames, handNumber,
                 })}
                 <div className="receipt-total">
                   <span>Total</span>
-                  <span>{score.tai} tai → {chipsWon} chips</span>
+                  <span>{score.tai} tai → {fmtMoney(chipsWon)}</span>
                 </div>
               </>
             ) : (
@@ -127,9 +128,9 @@ export function GameEnd({ view, result, displayNames, handNumber,
                     <span className="seat-char zh">{seatChar(p.seat_wind)}</span>
                     <span className="payment-name">{displayNames[p.seat]}</span>
                     <span className={`payment-delta ${delta >= 0 ? "pos" : "neg"}`}>
-                      {delta >= 0 ? "+" : "−"}{Math.abs(delta)}
+                      {fmtSigned(delta)}
                     </span>
-                    <span className="payment-total">{ledgerAfter[p.seat]}</span>
+                    <span className="payment-total">{fmtSigned(ledgerAfter[p.seat])}</span>
                   </div>
                 );
               })}

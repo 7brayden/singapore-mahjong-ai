@@ -1,8 +1,9 @@
 import { useState } from "react";
+import { fmtMoney } from "../money";
 
 export interface SetupConfig {
   humanSeat: number;          // 0 = East (dealer), 1 = South, ...
-  baseUnit: number;           // chips a 1-tai hand is worth (engine-side)
+  rate: number;               // cents a 1-tai win pays (engine base_unit)
   taiCap: number;             // scoring limit
   seedText: string;
   personas: string[];         // by table seat, human's entry is the hint bot
@@ -31,7 +32,8 @@ const SEATS = [
   { char: "西", name: "West", tag: null },
   { char: "北", name: "North", tag: null },
 ];
-const BASE_OPTIONS = [1, 2, 5, 10];
+// Rate in cents: what a 1-tai win pays. A "20" game is a 20-cent game.
+const RATE_OPTIONS = [10, 20, 50, 100];
 const CAP_OPTIONS = [3, 4, 5, 6];
 
 /** Bot seats in visual order right / across / left of the human. */
@@ -49,7 +51,7 @@ interface SetupProps {
 
 export function Setup({ initial, error, busy, onDeal }: SetupProps) {
   const [humanSeat, setHumanSeat] = useState(initial.humanSeat);
-  const [baseUnit, setBaseUnit] = useState(initial.baseUnit);
+  const [rate, setRate] = useState(initial.rate);
   const [taiCap, setTaiCap] = useState(initial.taiCap);
   const [seedText, setSeedText] = useState(initial.seedText);
   const [coachOn, setCoachOn] = useState(initial.coachOn);
@@ -58,7 +60,7 @@ export function Setup({ initial, error, busy, onDeal }: SetupProps) {
 
   const randomize = () => {
     setHumanSeat(Math.floor(Math.random() * 4));
-    setBaseUnit(BASE_OPTIONS[Math.floor(Math.random() * BASE_OPTIONS.length)]);
+    setRate(RATE_OPTIONS[Math.floor(Math.random() * RATE_OPTIONS.length)]);
     setSeedText("");
     setBotPersonas([0, 1, 2].map(() => PERSONAS[Math.floor(Math.random() * PERSONAS.length)].id));
   };
@@ -68,7 +70,7 @@ export function Setup({ initial, error, busy, onDeal }: SetupProps) {
     botSeats(humanSeat).forEach((seat, i) => {
       personas[seat] = botPersonas[i];
     });
-    onDeal({ humanSeat, baseUnit, taiCap, seedText: seedText.trim(), personas, coachOn });
+    onDeal({ humanSeat, rate, taiCap, seedText: seedText.trim(), personas, coachOn });
   };
 
   return (
@@ -107,16 +109,16 @@ export function Setup({ initial, error, busy, onDeal }: SetupProps) {
             </div>
             <div>
               <div className="section-label field-label">
-                Base amount <span className="field-hint">— chips a 1-tai win pays</span>
+                Rate <span className="field-hint">— what a 1-tai win pays</span>
               </div>
               <div className="stakes-grid">
-                {BASE_OPTIONS.map((b) => (
+                {RATE_OPTIONS.map((r) => (
                   <button
-                    key={b}
-                    className={`option-card${baseUnit === b ? " selected" : ""}`}
-                    onClick={() => setBaseUnit(b)}
+                    key={r}
+                    className={`option-card${rate === r ? " selected" : ""}`}
+                    onClick={() => setRate(r)}
                   >
-                    {b} chip{b === 1 ? "" : "s"}
+                    {fmtMoney(r)}
                   </button>
                 ))}
               </div>
@@ -141,7 +143,7 @@ export function Setup({ initial, error, busy, onDeal }: SetupProps) {
               <div className="section-label" style={{ marginBottom: 8 }}>Payouts</div>
               {Array.from({ length: taiCap }, (_, i) => {
                 const tai = i + 1;
-                const chips = baseUnit * 2 ** (tai - 1);
+                const pay = rate * 2 ** (tai - 1);
                 const isLimit = tai === taiCap;
                 return (
                   <div key={tai} className={`payout-row${isLimit ? " limit" : ""}`}>
@@ -149,7 +151,7 @@ export function Setup({ initial, error, busy, onDeal }: SetupProps) {
                       {tai} tai
                       {isLimit && <span className="limit-tag">limit 满</span>}
                     </span>
-                    <span className="mono">{chips} chip{chips === 1 ? "" : "s"}</span>
+                    <span className="mono">{fmtMoney(pay)}</span>
                   </div>
                 );
               })}

@@ -12,7 +12,7 @@ import {
   Setup, SetupConfig, PERSONAS, PERSONA_TO_BOT, BOT_NAMES, botSeats,
 } from "./components/Setup";
 
-const START_CHIPS = 128;
+// Balances start at zero and track net win/loss in cents.
 const BOT_BEAT_MS = 750;
 
 function parseSeed(text: string): number | null {
@@ -25,13 +25,13 @@ function parseSeed(text: string): number | null {
 
 export default function App() {
   const [config, setConfig] = useState<SetupConfig>({
-    humanSeat: 1, baseUnit: 1, taiCap: 6, seedText: "", personas: [], coachOn: true,
+    humanSeat: 1, rate: 20, taiCap: 6, seedText: "", personas: [], coachOn: true,
   });
   const [phase, setPhase] = useState<"setup" | "playing">("setup");
   const [gameId, setGameId] = useState<string | null>(null);
   const [view, setView] = useState<GameView | null>(null);
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
-  const [ledger, setLedger] = useState<number[]>([START_CHIPS, START_CHIPS, START_CHIPS, START_CHIPS]);
+  const [ledger, setLedger] = useState<number[]>([0, 0, 0, 0]);
   const [handNumber, setHandNumber] = useState(1);
   const [coachVisible, setCoachVisible] = useState(true);
   const [botBeat, setBotBeat] = useState(false);
@@ -78,7 +78,7 @@ export default function App() {
         human_seat: cfg.humanSeat,
         bots,
         tai_cap: cfg.taiCap,
-        base_unit: cfg.baseUnit,
+        base_unit: cfg.rate,   // engine units are cents
       });
       socketRef.current?.close();
       ledgerAppliedFor.current = null;
@@ -102,7 +102,7 @@ export default function App() {
   const onDeal = (cfg: SetupConfig) => {
     setConfig(cfg);
     setCoachVisible(cfg.coachOn);
-    setLedger([START_CHIPS, START_CHIPS, START_CHIPS, START_CHIPS]);
+    setLedger([0, 0, 0, 0]);
     setHandNumber(1);
     startHand(cfg, 1);
   };

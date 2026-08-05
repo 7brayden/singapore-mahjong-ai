@@ -683,7 +683,7 @@ button.hand-tile { cursor: default; }
 .payment-delta { font-family: "DM Mono", monospace; font-size: 14px; }
 .payment-delta.pos { color: var(--safe-text); }
 .payment-delta.neg { color: var(--danger-text); }
-.payment-total { font-family: "DM Mono", monospace; font-size: 11px; color: var(--text-muted); width: 36px; text-align: right; }
+.payment-total { font-family: "DM Mono", monospace; font-size: 11px; color: var(--text-muted); width: 58px; text-align: right; }
 .end-footer { display: flex; gap: 12px; align-items: center; padding: 8px 32px 28px; }
 .end-footer .btn-accent { flex: 1; padding: 16px; border-radius: 12px; font-size: 16px; font-weight: 700; }
 .end-footer .btn-ghost { flex: 1; padding: 16px; border-radius: 12px; font-size: 16px; }
