@@ -6,7 +6,7 @@ directly to exercise claim mechanics with constructed hands.
 
 import pytest
 
-from mahjong.game import GameState, BaseAgent
+from mahjong.game import GameState, BaseAgent, run_decision
 from mahjong.agents import RandomAgent, GreedyAgent, DefensiveAgent, HybridAgent
 
 
@@ -79,7 +79,7 @@ def test_check_chow_executes_agents_chosen_combination():
     for t in [1, 2, 3, 5, 6, 8, 9, 9, 9, 20, 21, 22, 25]:
         hand.add_tile(t)
 
-    result = game._check_chow(0, 4)  # P0 discards 5w; P1 may chow
+    result = run_decision(game, game._check_chow(0, 4))  # P0 discards 5w
     assert result == (1, [5, 6])
 
 
@@ -91,7 +91,7 @@ def test_check_chow_passes_when_no_option_improves():
     for t in [1, 2, 3, 9, 9, 9, 14, 14, 14, 20, 21, 22, 25]:
         hand.add_tile(t)
 
-    assert game._check_chow(0, 4) is None
+    assert run_decision(game, game._check_chow(0, 4)) is None
 
 
 def test_check_chow_rejects_invalid_agent_choice():
@@ -106,7 +106,7 @@ def test_check_chow_rejects_invalid_agent_choice():
         hand.add_tile(t)
 
     with pytest.raises(ValueError):
-        game._check_chow(0, 4)
+        run_decision(game, game._check_chow(0, 4))
 
 
 # ── Nested claim windows ──────────────────────────────────────────────
@@ -133,7 +133,7 @@ def test_claim_window_opens_on_claimers_discard():
             game.hands[p].add_tile(t)
 
     game.hands[0].discard(0)
-    assert game._resolve_discard(0, 0) is True
+    assert run_decision(game, game._resolve_discard(0, 0)) is True
 
     assert game.hands[1].exposed == [("pong", [0, 0, 0])]
     assert game.hands[2].exposed == [("pong", [10, 10, 10])]

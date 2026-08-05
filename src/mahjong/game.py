@@ -42,6 +42,54 @@ from mahjong.scoring import (
 DEAD_WALL_SIZE = 15
 
 
+# ── Decision requests (the engine's yield points) ─────────────────────
+#
+# The core game loop is a generator: wherever a player must decide
+# something, it yields one of these requests and receives the answer
+# back via gen.send(). GameState.play() answers every request from the
+# seat's agent; InteractiveGame (interactive.py) pauses on human seats.
+
+@dataclass
+class DecisionRequest:
+    """Base class for decisions the engine needs a player to make."""
+    player: int
+
+
+@dataclass
+class DiscardRequest(DecisionRequest):
+    """Choose a tile from hand to discard. Answer: tile_id.
+
+    drawn is the tile just drawn (None when discarding after a claim).
+    """
+    drawn: Optional[int] = None
+
+
+@dataclass
+class ClaimRequest(DecisionRequest):
+    """Claim the discarded tile as a pong or kong? Answer: bool."""
+    tile_id: int = -1
+    claim_type: str = "pong"
+
+
+@dataclass
+class ChowRequest(DecisionRequest):
+    """Pick a chow to form with the discarded tile.
+
+    Answer: one of options as (partner1, partner2), or None to pass.
+    """
+    tile_id: int = -1
+    options: Optional[List[Tuple[int, int]]] = None
+
+
+@dataclass
+class KongRequest(DecisionRequest):
+    """Pick a kong to declare on your own turn.
+
+    Answer: one of options as (kind, tile_id), or None to pass.
+    """
+    options: Optional[List[Tuple[str, int]]] = None
+
+
 # ── Agent interface ───────────────────────────────────────────────────
 
 class BaseAgent:
@@ -304,16 +352,17 @@ class GameState:
         pong. Only one player can ever hold enough copies, so there is
         no claim conflict. Priority: closest in turn order.
 
-        Returns (claimer, "kong"|"pong") or None.
+        Generator: yields ClaimRequests, returns (claimer, "kong"|"pong")
+        or None.
         """
         for offset in range(1, 4):
             candidate = (discarder + offset) % 4
             hand = self.hands[candidate]
             if hand.counts[tile_id] >= 3:
-                if self.agents[candidate].should_claim(candidate, tile_id, "kong", self):
+                if (yield ClaimRequest(candidate, tile_id, "kong")):
                     return (candidate, "kong")
             if hand.counts[tile_id] >= 2:
-                if self.agents[candidate].should_claim(candidate, tile_id, "pong", self):
+                if (yield ClaimRequest(candidate, tile_id, "pong")):
                     return (candidate, "pong")
         return None
 
@@ -321,10 +370,11 @@ class GameState:
         """Check if the next player wants to chow the discarded tile.
 
         Only the player immediately after the discarder can chow.
-        Only numbered tiles can form chows. The agent chooses which
-        combination to form via choose_chow.
+        Only numbered tiles can form chows. The player chooses which
+        combination to form.
 
-        Returns (claimer, [partner1, partner2]) or None.
+        Generator: yields a ChowRequest, returns
+        (claimer, [partner1, partner2]) or None.
         """
         if not is_numbered(tile_id):
             return None
@@ -339,7 +389,7 @@ class GameState:
         if not options:
             return None
 
-        choice = self.agents[next_player].choose_chow(next_player, tile_id, options, self)
+        choice = yield ChowRequest(next_player, tile_id, options)
         if choice is None:
             return None
 
@@ -389,7 +439,7 @@ class GameState:
 
         # After a claim the claimer effectively holds one tile too many
         # (2 concealed tiles left for a 3-tile meld) and must discard.
-        discard_tile = self.agents[claimer].choose_discard(claimer, self)
+        discard_tile = yield DiscardRequest(claimer)
 
         if discard_tile not in hand.tiles:
             raise ValueError(
@@ -439,7 +489,7 @@ class GameState:
             options = hand.kong_options()
             if not options:
                 return True
-            choice = self.agents[p].choose_kong(p, options, self)
+            choice = yield KongRequest(p, options)
             if choice is None:
                 return True
             choice = tuple(choice)
@@ -486,11 +536,11 @@ class GameState:
 
         # 3. Kong declarations (concealed or added), each with a
         #    replacement draw and possible kong-draw win or robbed kong
-        if not self._kong_phase(p):
+        if not (yield from self._kong_phase(p)):
             return False
 
-        # 4. Agent chooses discard
-        discard_tile = self.agents[p].choose_discard(p, self)
+        # 4. Player chooses discard
+        discard_tile = yield DiscardRequest(p, drawn=drawn)
 
         # Validate
         if discard_tile not in hand.tiles:
@@ -503,9 +553,9 @@ class GameState:
         # 4. Discard
         hand.discard(discard_tile)
 
-        # 5. Resolve claims on the discard (ron > pong > chow, repeating
-        #    for each claimer's follow-up discard)
-        return self._resolve_discard(p, discard_tile)
+        # 5. Resolve claims on the discard (ron > kong/pong > chow,
+        #    repeating for each claimer's follow-up discard)
+        return (yield from self._resolve_discard(p, discard_tile))
 
     def _check_ron(self, discarder: int, tile_id: int, *,
                    is_rob_kong: bool = False,
@@ -557,22 +607,22 @@ class GameState:
                                dealt_in_by=discarder, score=score)
                 return False
 
-            claim = self._check_pong_or_kong(discarder, tile_id)
+            claim = yield from self._check_pong_or_kong(discarder, tile_id)
             if claim is not None:
                 claimer, claim_type = claim
                 # Remove the tile from the discard pile (it was just added)
                 self.hands[discarder].discards.pop()
-                tile_id = self._execute_claim(claimer, tile_id, claim_type)
+                tile_id = yield from self._execute_claim(claimer, tile_id, claim_type)
                 if tile_id is None:
                     return False  # game ended inside the claim
                 discarder = claimer
                 continue
 
-            chow_result = self._check_chow(discarder, tile_id)
+            chow_result = yield from self._check_chow(discarder, tile_id)
             if chow_result is not None:
                 chow_claimer, partners = chow_result
                 self.hands[discarder].discards.pop()
-                tile_id = self._execute_claim(chow_claimer, tile_id, "chow", partners)
+                tile_id = yield from self._execute_claim(chow_claimer, tile_id, "chow", partners)
                 discarder = chow_claimer
                 continue
 
@@ -611,8 +661,39 @@ class GameState:
 
     # ── Main game loop ────────────────────────────────────────────────
 
+    def step_game(self, max_turns: int = 200):
+        """Master generator: plays the whole game, yielding DecisionRequests.
+
+        Send each answer back with gen.send(); StopIteration.value is the
+        GameResult. Builds the wall via setup() if not already done.
+        """
+        if not self.wall:
+            self.setup()
+        while not self.game_over and self.turn < max_turns:
+            keep_going = yield from self._execute_turn()
+            if not keep_going:
+                break
+        if self.result is None:
+            self._end_game(winner=None, win_type=None)
+        return self.result
+
+    def dispatch_to_agent(self, request: DecisionRequest):
+        """Answer a decision request using the seat's agent."""
+        agent = self.agents[request.player]
+        if isinstance(request, DiscardRequest):
+            return agent.choose_discard(request.player, self)
+        if isinstance(request, ClaimRequest):
+            return agent.should_claim(request.player, request.tile_id,
+                                      request.claim_type, self)
+        if isinstance(request, ChowRequest):
+            return agent.choose_chow(request.player, request.tile_id,
+                                     request.options, self)
+        if isinstance(request, KongRequest):
+            return agent.choose_kong(request.player, request.options, self)
+        raise TypeError(f"Unknown decision request: {request!r}")
+
     def play(self, max_turns: int = 200, verbose: bool = False) -> GameResult:
-        """Play a complete game and return the result.
+        """Play a complete game with every seat driven by its agent.
 
         Args:
             max_turns: safety limit to prevent infinite loops
@@ -628,15 +709,7 @@ class GameState:
                       f"{hand_to_str(h.tiles, short=True)}"
                       f" | flowers: {len(h.flowers)}")
 
-        while not self.game_over and self.turn < max_turns:
-            if verbose and self.turn % 20 == 0 and self.turn > 0:
-                print(f"  Turn {self.turn}, wall: {self.tiles_remaining}")
-
-            if not self._execute_turn():
-                break
-
-        if self.result is None:
-            self._end_game(winner=None, win_type=None)
+        run_decision(self, self.step_game(max_turns))
 
         if verbose:
             r = self.result
@@ -659,6 +732,21 @@ class GameState:
             print(f"Payments: {r.payments}")
 
         return self.result
+
+
+def run_decision(game: GameState, gen):
+    """Drive a decision generator to completion, answering every request
+    from the seats' agents. Returns the generator's return value.
+
+    This is how play() runs the whole game synchronously, and how tests
+    can call generator-based internals (e.g. _resolve_discard) directly.
+    """
+    try:
+        request = next(gen)
+        while True:
+            request = gen.send(game.dispatch_to_agent(request))
+    except StopIteration as stop:
+        return stop.value
 
 
 # ══════════════════════════════════════════════════════════════════════

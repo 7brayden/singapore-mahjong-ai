@@ -69,6 +69,7 @@ src/mahjong/
 ├── opponent_model.py      # Estimates how close each opponent is to winning
 ├── scoring.py             # Tai scoring, payments, house-rule config
 ├── session.py             # Multi-round sessions: dealer rotation, running scores
+├── interactive.py         # Human-in-the-loop controller with redacted views
 ├── advisor.py             # Interactive tool — input your hand, get advice
 └── agents/
     ├── random_agent.py    # Discards randomly. Never wins.
@@ -133,6 +134,24 @@ House rules live in `ScoreConfig` and are all adjustable: minimum 1 tai to win (
 PYTHONPATH=src python3 -m mahjong.session   # demo: one East round, 2 Greedy vs 2 Hybrid
 ```
 
+## Playing against the bots (engine API)
+
+The game loop is a generator that yields decision requests, so a human can sit in any seat. `InteractiveGame` pauses whenever a human seat must act and exposes a JSON-ready, redacted view of the table — your tiles, everyone's discards and melds, and opponents' tile *counts* only:
+
+```python
+from mahjong.interactive import InteractiveGame
+from mahjong.agents import HybridAgent
+
+game = InteractiveGame([HybridAgent(f"Bot{i}") for i in range(4)],
+                       human_seats={0}, seed=1)
+game.start()                      # runs until it's your decision
+while not game.game_over:
+    view = game.view_for(0)       # what seat 0 is allowed to see
+    game.submit(answer)           # answer game.pending; bots then play on
+```
+
+This is the surface the upcoming web UI talks to. The agent attached to a human seat can still be consulted for hints ("what would the hybrid bot do here?") via `game.game.dispatch_to_agent(game.pending)`.
+
 ## Benchmark results
 
 200 games per experiment, deterministic seeds.
@@ -193,7 +212,7 @@ python3 experiments/generate_plots.py     # result charts (needs matplotlib)
 ## Future work
 
 - Special hands: thirteen orphans, heaven/earth wins
-- Human-in-the-loop play: FastAPI backend + React UI with live stats (shanten, danger, opponent threat) so players learn while they play
+- Web UI: FastAPI backend + React frontend (in Docker) over the InteractiveGame API, with live stats (shanten, danger, opponent threat) so players learn while they play
 - LLM-powered move explanations grounded in the engine's analysis
 - Learned danger model trained on simulation data
 - Lookahead: sample future draws, estimate discard value

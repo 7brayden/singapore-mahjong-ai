@@ -3,7 +3,7 @@
 import pytest
 
 from mahjong.hand import Hand
-from mahjong.game import GameState, BaseAgent
+from mahjong.game import GameState, BaseAgent, run_decision
 from mahjong.agents import GreedyAgent
 from mahjong.scoring import (
     ScoreConfig, score_win, is_legal_win, compute_win_payments,
@@ -173,7 +173,7 @@ def _chicken_gate_game(score_config=None):
 def test_chicken_hand_cannot_ron():
     game = _chicken_gate_game()
     game.hands[0].discard(27)
-    assert game._resolve_discard(0, 27) is True  # game continues
+    assert run_decision(game, game._resolve_discard(0, 27)) is True  # continues
     assert not game.game_over
     assert game.deal_ins[0] == 0  # not a legal win → not a deal-in
 
@@ -181,7 +181,7 @@ def test_chicken_hand_cannot_ron():
 def test_chicken_hand_can_ron_when_house_allows():
     game = _chicken_gate_game(ScoreConfig(allow_chicken_hand=True))
     game.hands[0].discard(27)
-    assert game._resolve_discard(0, 27) is False
+    assert run_decision(game, game._resolve_discard(0, 27)) is False
     assert game.result.winner == 1
     assert game.result.winning_score.total_tai == 0
     # Chicken value = base unit; shooter pays all three shares

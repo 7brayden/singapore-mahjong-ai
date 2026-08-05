@@ -7,7 +7,7 @@ padded wall so draws and last-tile logic behave normally.
 import pytest
 
 from mahjong.hand import Hand
-from mahjong.game import GameState, BaseAgent
+from mahjong.game import GameState, BaseAgent, run_decision
 from mahjong.agents import GreedyAgent
 from mahjong.scoring import ScoreConfig, score_win
 from mahjong.tiles import WIND_START
@@ -93,7 +93,7 @@ def test_kong_claim_draws_replacement_and_discards():
 
     wall_before = game.tiles_remaining
     game.hands[0].discard(4)
-    assert game._resolve_discard(0, 4) is True
+    assert run_decision(game, game._resolve_discard(0, 4)) is True
 
     assert game.hands[1].exposed == [("kong", [4, 4, 4, 4])]
     # Drew one replacement, then discarded: 13 - 3 + 1 - 1 = 10 concealed
@@ -116,7 +116,7 @@ def test_kong_replacement_win_scores_kong_draw():
     for t in [4, 4, 4, 4, 0, 1, 2, 9, 9, 9, 26, 26, 25]:
         game.hands[0].add_tile(t)
 
-    assert game._execute_turn() is False
+    assert run_decision(game, game._execute_turn()) is False
     assert game.result.winner == 0
     assert game.result.win_type == "tsumo"
     rules = [item.rule for item in game.result.winning_score.items]
@@ -140,7 +140,7 @@ def test_added_kong_can_be_robbed():
     for t in [0, 1, 2, 3, 4, 5, 6, 7, 8, 22, 22, 9, 10]:
         game.hands[2].add_tile(t)
 
-    assert game._execute_turn() is False
+    assert run_decision(game, game._execute_turn()) is False
     assert game.result.winner == 2
     assert game.result.win_type == "ron"
     assert game.result.dealt_in_by == 1
@@ -163,7 +163,7 @@ def test_last_tile_tsumo_scores_last_tile():
     for t in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 9, 9, 10]:
         game.hands[0].add_tile(t)
 
-    assert game._execute_turn() is False
+    assert run_decision(game, game._execute_turn()) is False
     assert game.result.winner == 0
     rules = [item.rule for item in game.result.winning_score.items]
     assert "last_tile" in rules
