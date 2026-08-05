@@ -13,14 +13,10 @@ Manages the full game loop:
      f. If claimed, claimer forms meld and discards; otherwise next player
   4. Game ends on: win, wall exhaustion (draw), or no more replacement tiles
 
-Simplifications for v1 (Week 1):
-  - No chow/pong/kong claiming (pure draw-and-discard)
-  - Win by self-draw (tsumo) only
-  - No scoring beyond win/loss
-  - Kong declaration not yet implemented
-
-These will be added in Week 2 when we need opponent interaction
-for the defense/hybrid agents to reason about.
+Current simplifications:
+  - Kong not yet implemented (declaration, replacement draws, robbing)
+  - Single hand per game: no dealer rotation or multi-round sessions yet
+    (seat winds and the prevailing wind are fixed at construction)
 """
 
 import random
@@ -30,9 +26,13 @@ from dataclasses import dataclass
 from mahjong.tiles import (
     create_wall, is_bonus, tile_short, hand_to_str,
     NUM_STANDARD_UNIQUE, NUM_TOTAL_TILES,
-    is_numbered, suit_of, rank_of, possible_chow_partners
+    is_numbered, suit_of, rank_of, possible_chow_partners,
+    WIND_START, FLOWER_START, ANIMAL_START
 )
 from mahjong.hand import Hand, calculate_shanten, is_winning_hand
+from mahjong.scoring import (
+    ScoreConfig, HandScore, score_win, is_legal_win, compute_win_payments
+)
 
 # Singapore Mahjong: game ends in a draw when 15 tiles remain in the wall.
 # These 15 tiles are "dead" and cannot be drawn.
@@ -106,6 +106,8 @@ class GameResult:
     flowers_collected: List[int]    # bonus tiles per player
     tiles_remaining: int            # tiles left in wall
     dealt_in_by: Optional[int] = None  # who discarded the ron-winning tile
+    winning_score: Optional[HandScore] = None  # tai breakdown of the winning hand
+    payments: Optional[List[int]] = None  # chip deltas per player (win + instant bonuses)
 
 
 # ── Game state ────────────────────────────────────────────────────────
@@ -127,12 +129,19 @@ class GameState:
         - wall contents and order
     """
 
-    def __init__(self, agents: List[BaseAgent], seed: Optional[int] = None):
+    def __init__(self, agents: List[BaseAgent], seed: Optional[int] = None,
+                 dealer: int = 0, prevailing_wind: int = WIND_START,
+                 score_config: Optional[ScoreConfig] = None):
         if len(agents) != 4:
             raise ValueError("Need exactly 4 agents")
 
         self.agents = agents
         self.rng = random.Random(seed)
+
+        # Scoring context (fixed per hand until dealer rotation arrives)
+        self.dealer = dealer
+        self.prevailing_wind = prevailing_wind
+        self.score_config = score_config or ScoreConfig()
 
         # Game state
         self.hands: List[Hand] = [Hand() for _ in range(4)]
@@ -143,11 +152,18 @@ class GameState:
         self.game_over: bool = False
         self.result: Optional[GameResult] = None
 
+        # Chip ledger: instant bonus payouts accumulate here during play;
+        # win payments are added when the game ends.
+        self.payments: List[int] = [0, 0, 0, 0]
+
         # Deal-in tracking: deal_ins[p] counts how many times player p
-        # discarded a tile that would have completed an opponent's hand.
-        # This includes the final deal-in that ends the game (ron) AND
-        # near-misses where an opponent was tenpai but didn't claim.
+        # discarded a tile that an opponent could legally have won on
+        # (meets the minimum tai requirement).
         self.deal_ins: List[int] = [0, 0, 0, 0]
+
+    def seat_index(self, player_idx: int) -> int:
+        """Seat relative to the dealer: 0 = East (dealer), 1 = South, ..."""
+        return (player_idx - self.dealer) % 4
 
     # ── Wall and drawing ──────────────────────────────────────────────
 
@@ -179,10 +195,37 @@ class GameState:
 
             is_flower = self.hands[player_idx].add_tile(tile)
             if is_flower:
-                # Bonus tile — set aside, draw replacement
+                # Bonus tile — set aside, pay instant bonus, draw replacement
+                self._apply_instant_bonus(player_idx, tile)
                 continue
             else:
                 return tile
+
+    def _apply_instant_bonus(self, player_idx: int, tile: int):
+        """Instant payouts for bonus tiles (house rule, on by default).
+
+        Each animal, and each completed flower series (F1-F4 or F5-F8),
+        collects one base unit from every other player immediately.
+        """
+        cfg = self.score_config
+        if not cfg.instant_bonus_payouts:
+            return
+
+        amount = 0
+        if tile >= ANIMAL_START:
+            amount += cfg.base_unit
+
+        flowers = set(self.hands[player_idx].flowers)
+        for series_start in (FLOWER_START, FLOWER_START + 4):
+            series = set(range(series_start, series_start + 4))
+            if tile in series and series <= flowers:
+                amount += cfg.base_unit
+
+        if amount:
+            for q in range(4):
+                if q != player_idx:
+                    self.payments[q] -= amount
+                    self.payments[player_idx] += amount
 
     # ── Setup ─────────────────────────────────────────────────────────
 
@@ -330,10 +373,14 @@ class GameState:
             self._end_game(winner=None, win_type=None)
             return False
 
-        # 2. Check tsumo (self-draw win)
+        # 2. Check tsumo (self-draw win) — must meet the minimum tai
         if is_winning_hand(hand.counts, hand.num_exposed_melds):
-            self._end_game(winner=p, win_type="tsumo")
-            return False
+            score = score_win(hand, drawn, True, self.seat_index(p),
+                              self.prevailing_wind, self.score_config)
+            if score is not None and is_legal_win(score, self.score_config):
+                self._end_game(winner=p, win_type="tsumo", score=score)
+                return False
+            # Hand is complete but below minimum tai — play on
 
         # 3. Agent chooses discard
         discard_tile = self.agents[p].choose_discard(p, self)
@@ -353,23 +400,33 @@ class GameState:
         #    for each claimer's follow-up discard)
         return self._resolve_discard(p, discard_tile)
 
-    def _check_ron(self, discarder: int, tile_id: int) -> Optional[int]:
-        """Check whether any opponent wins on the discarded tile.
+    def _check_ron(self, discarder: int,
+                   tile_id: int) -> Optional[Tuple[int, HandScore]]:
+        """Check whether any opponent legally wins on the discarded tile.
 
-        Every opponent waiting on the tile counts as a deal-in for the
-        discarder; the winner is the closest waiting opponent in turn order.
+        A hand must both complete AND meet the minimum tai to ron.
+        Every opponent with a legal win counts as a deal-in for the
+        discarder; the winner is the closest in turn order.
         """
         winner = None
+        winning_score = None
         for offset in range(1, 4):
             opponent = (discarder + offset) % 4
             opp_hand = self.hands[opponent]
             opp_hand.counts[tile_id] += 1
             if is_winning_hand(opp_hand.counts, opp_hand.num_exposed_melds):
-                if winner is None:
-                    winner = opponent
-                self.deal_ins[discarder] += 1
+                score = score_win(opp_hand, tile_id, False,
+                                  self.seat_index(opponent),
+                                  self.prevailing_wind, self.score_config)
+                if score is not None and is_legal_win(score, self.score_config):
+                    if winner is None:
+                        winner = opponent
+                        winning_score = score
+                    self.deal_ins[discarder] += 1
             opp_hand.counts[tile_id] -= 1
-        return winner
+        if winner is None:
+            return None
+        return (winner, winning_score)
 
     def _resolve_discard(self, discarder: int, tile_id: int) -> bool:
         """Resolve claims on a discard with priority ron > pong > chow.
@@ -379,10 +436,12 @@ class GameState:
         by looping. Returns True if the game continues, False if over.
         """
         while True:
-            ron_winner = self._check_ron(discarder, tile_id)
-            if ron_winner is not None:
+            ron_result = self._check_ron(discarder, tile_id)
+            if ron_result is not None:
+                ron_winner, score = ron_result
                 self.hands[ron_winner].add_tile(tile_id)
-                self._end_game(winner=ron_winner, win_type="ron", dealt_in_by=discarder)
+                self._end_game(winner=ron_winner, win_type="ron",
+                               dealt_in_by=discarder, score=score)
                 return False
 
             pong_claimer = self._check_pong(discarder, tile_id)
@@ -407,9 +466,17 @@ class GameState:
             return True
 
     def _end_game(self, winner: Optional[int], win_type: Optional[str],
-                  dealt_in_by: Optional[int] = None):
-        """Record the game result."""
+                  dealt_in_by: Optional[int] = None,
+                  score: Optional[HandScore] = None):
+        """Record the game result, including scoring and chip payments."""
         self.game_over = True
+
+        payments = self.payments[:]
+        if winner is not None and score is not None:
+            win_pay = compute_win_payments(score, winner, dealt_in_by,
+                                           self.score_config)
+            payments = [payments[i] + win_pay[i] for i in range(4)]
+
         self.result = GameResult(
             winner=winner,
             win_type=win_type,
@@ -422,6 +489,8 @@ class GameState:
             flowers_collected=[len(h.flowers) for h in self.hands],
             tiles_remaining=self.tiles_remaining,
             dealt_in_by=dealt_in_by,
+            winning_score=score,
+            payments=payments,
         )
 
     # ── Main game loop ────────────────────────────────────────────────
@@ -462,12 +531,16 @@ class GameState:
                     win_msg += (f" (P{r.dealt_in_by} "
                                f"({self.agents[r.dealt_in_by].name}) dealt in)")
                 print(win_msg)
+                if r.winning_score is not None:
+                    print(f"Score: {r.winning_score.describe()} "
+                          f"→ {r.winning_score.value} chips")
             else:
                 print(f"\nResult: Draw after {r.turns} turns. "
                       f"Wall remaining: {r.tiles_remaining}")
             print(f"Final shanten: {r.final_shanten}")
             print(f"Deal-ins: {r.deal_ins}")
             print(f"Flowers: {r.flowers_collected}")
+            print(f"Payments: {r.payments}")
 
         return self.result
 

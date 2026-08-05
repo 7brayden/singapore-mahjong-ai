@@ -67,6 +67,7 @@ src/mahjong/
 ├── game.py                # Game loop: draw, discard, tsumo, ron, pong/chow
 ├── defense.py             # Danger scoring for discard candidates
 ├── opponent_model.py      # Estimates how close each opponent is to winning
+├── scoring.py             # Tai scoring, payments, house-rule config
 ├── advisor.py             # Interactive tool — input your hand, get advice
 └── agents/
     ├── random_agent.py    # Discards randomly. Never wins.
@@ -101,6 +102,26 @@ Melds - completed sets of 3 or 4 tiles.
 **Opponent modelling.** Estimates each opponent's threat from what you can see: exposed melds, whether they keep their draws (discard efficiency), whether they're clearing safe tiles late (a tenpai tell), and which suits they avoid discarding.
 
 **Hybrid agent.** Scores each discard on offense (shanten + acceptance) and defense (danger), then combines them with weights that shift by context — aggressive when close to winning, cautious when far, more defensive late. It also claims pong/chow selectively, only when shanten ≤ 2 and the claim genuinely helps. Greedy claims everything; the hybrid avoids exposing information it doesn't need to.
+
+## Scoring (tai)
+
+Every win is scored as a list of named tai items (`scoring.py`), so the UI can show players exactly why a hand is worth what it is. Chip value doubles per tai: `base_unit × 2^(tai−1)`, capped at 5 tai (the limit).
+
+| Rule | Tai |
+|---|---|
+| Self-draw (自摸) | 1 |
+| No flowers or animals (无花) | 1 |
+| Matching seat flower / animal | 1 each |
+| Complete flower series (一套花) | 1 |
+| Dragon triplet / seat wind / prevailing wind | 1 each |
+| All triplets (碰碰胡) | 2 |
+| Half flush (混一色) | 2 |
+| Little three dragons (小三元) | +2 over the dragon pongs |
+| Full flush (清一色) | 4 |
+| Ping Hu — all chows, no bonus tiles (平胡) | 4 |
+| Big three dragons, four winds, all honors, all terminals | limit (5) |
+
+House rules live in `ScoreConfig` and are all adjustable: minimum 1 tai to win (chicken hands blocked by default), shooter pays all three shares on a ron, tsumo collects from everyone, and animals/completed flower series pay out instantly when drawn. Kong-related tai, thirteen orphans, and heaven/earth wins arrive with kong mechanics.
 
 ## Benchmark results
 
@@ -161,8 +182,7 @@ python3 experiments/generate_plots.py     # result charts (needs matplotlib)
 
 ## Future work
 
-- Tai scoring with shooter-pays payouts, minimum-tai win gate, flower/animal payouts
-- Kong mechanics (exposed/concealed/added, replacement draws, robbing the kong)
+- Kong mechanics (exposed/concealed/added, replacement draws, robbing the kong) plus kong tai, thirteen orphans, heaven/earth wins
 - Seat/prevailing winds, dealer rotation, multi-round sessions
 - Human-in-the-loop play: FastAPI backend + React UI with live stats (shanten, danger, opponent threat) so players learn while they play
 - LLM-powered move explanations grounded in the engine's analysis

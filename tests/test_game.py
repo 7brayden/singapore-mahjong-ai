@@ -180,3 +180,23 @@ def test_golden_mixed_field(seed, winner, win_type, turns, remaining):
     result = GameState(agents, seed=seed).play()
     assert (result.winner, result.win_type, result.turns, result.tiles_remaining) == \
            (winner, win_type, turns, remaining)
+
+
+# (seed, tai, value, item rules, payments incl. instant bonuses)
+GOLDEN_SCORING_GREEDY_MIRROR = [
+    (0, 1, 1, ["seat_flower"], [0, -7, 8, -1]),
+    (1, 1, 1, ["animal"], [-6, 4, 1, 1]),
+    (2, 2, 2, ["animal", "seat_flower"], [2, -8, -2, 8]),
+]
+
+
+@pytest.mark.parametrize("seed,tai,value,rules,payments", GOLDEN_SCORING_GREEDY_MIRROR)
+def test_golden_scoring(seed, tai, value, rules, payments):
+    result = GameState([GreedyAgent(f"G{i}") for i in range(4)], seed=seed).play()
+    score = result.winning_score
+    assert score is not None
+    assert score.tai == tai
+    assert score.value == value
+    assert [item.rule for item in score.items] == rules
+    assert result.payments == payments
+    assert sum(result.payments) == 0

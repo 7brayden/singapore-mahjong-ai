@@ -363,6 +363,72 @@ def get_winning_tiles(counts: List[int], num_exposed_melds: int = 0) -> List[int
 
 
 # ══════════════════════════════════════════════════════════════════════
+# WINNING HAND DECOMPOSITION (for scoring)
+# ══════════════════════════════════════════════════════════════════════
+
+def decompose_winning_hand(counts: List[int],
+                           melds_needed: int) -> List[Tuple[int, List[Tuple[str, int]]]]:
+    """Decompose a complete concealed hand into pair + melds.
+
+    Args:
+        counts: concealed tile counts INCLUDING the winning tile
+        melds_needed: 4 minus the number of exposed melds
+
+    Returns:
+        All distinct decompositions as (pair_tile, melds) where melds is
+        a list of ("chow", start_tile) or ("pong", tile) entries.
+        Empty list if the tiles do not form a complete hand.
+
+    Scoring evaluates every decomposition and keeps the best, since some
+    hands decompose multiple ways (e.g. 111222333 as pongs or chows).
+    """
+    results = []
+    for pair_tile in range(NUM_STANDARD_UNIQUE):
+        if counts[pair_tile] < 2:
+            continue
+        counts[pair_tile] -= 2
+        for melds in _decompose_melds(counts, melds_needed):
+            results.append((pair_tile, melds))
+        counts[pair_tile] += 2
+    return results
+
+
+def _decompose_melds(counts: List[int], melds_needed: int) -> List[List[Tuple[str, int]]]:
+    """Return every way to split counts into exactly melds_needed melds."""
+    if melds_needed == 0:
+        return [[]] if sum(counts) == 0 else []
+
+    # Anchor on the lowest remaining tile: any full decomposition must
+    # consume it as a pong or as the start of a chow (lower tiles are gone).
+    first = next((t for t in range(NUM_STANDARD_UNIQUE) if counts[t] > 0), None)
+    if first is None:
+        return []
+
+    results = []
+
+    if counts[first] >= 3:
+        counts[first] -= 3
+        for rest in _decompose_melds(counts, melds_needed - 1):
+            results.append([("pong", first)] + rest)
+        counts[first] += 3
+
+    if is_numbered(first) and rank_of(first) <= 7:
+        t2, t3 = first + 1, first + 2
+        if suit_of(t2) == suit_of(first) == suit_of(t3):
+            if counts[t2] >= 1 and counts[t3] >= 1:
+                counts[first] -= 1
+                counts[t2] -= 1
+                counts[t3] -= 1
+                for rest in _decompose_melds(counts, melds_needed - 1):
+                    results.append([("chow", first)] + rest)
+                counts[first] += 1
+                counts[t2] += 1
+                counts[t3] += 1
+
+    return results
+
+
+# ══════════════════════════════════════════════════════════════════════
 # DISCARD EVALUATION (for greedy agent)
 # ══════════════════════════════════════════════════════════════════════
 
