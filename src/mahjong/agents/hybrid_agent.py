@@ -38,23 +38,55 @@ class HybridAgent(BaseAgent):
 
     def should_claim(self, player_idx: int, tile_id: int,
                      claim_type: str, game_state) -> bool:
-        """Claim a pong if it improves shanten, but only when already close
-        to winning."""
-        if claim_type != "pong":
-            return False
-
+        """Claim a pong (if it improves shanten) or a kong (if it doesn't
+        hurt), but only when already close to winning."""
         hand = game_state.hands[player_idx]
         counts = hand.copy_counts()
-        if counts[tile_id] < 2:
-            return False
-
         current_shanten = calculate_shanten(counts, hand.num_exposed_melds)
         if current_shanten > self.CLAIM_SHANTEN_LIMIT:
             return False
 
-        counts[tile_id] -= 2
-        new_shanten = calculate_shanten(counts, hand.num_exposed_melds + 1)
-        return new_shanten < current_shanten
+        if claim_type == "pong":
+            if counts[tile_id] < 2:
+                return False
+            counts[tile_id] -= 2
+            new_shanten = calculate_shanten(counts, hand.num_exposed_melds + 1)
+            return new_shanten < current_shanten
+
+        if claim_type == "kong":
+            if counts[tile_id] < 3:
+                return False
+            counts[tile_id] -= 3
+            new_shanten = calculate_shanten(counts, hand.num_exposed_melds + 1)
+            return new_shanten <= current_shanten
+
+        return False
+
+    def choose_kong(self, player_idx: int, options, game_state):
+        """Declare a kong on our own turn when it doesn't worsen shanten.
+
+        Unlike discard claims this isn't gated on being close to winning:
+        the replacement draw and payout are free value, and a concealed
+        kong reveals nothing opponents can use against us mid-hand."""
+        hand = game_state.hands[player_idx]
+        counts = hand.copy_counts()
+        current_shanten = calculate_shanten(counts, hand.num_exposed_melds)
+
+        best_option = None
+        best_shanten = None
+        for kind, tile_id in options:
+            test = counts[:]
+            if kind == "concealed":
+                test[tile_id] -= 4
+                s = calculate_shanten(test, hand.num_exposed_melds + 1)
+            else:  # added kong: the pong stays one meld
+                test[tile_id] -= 1
+                s = calculate_shanten(test, hand.num_exposed_melds)
+            if s <= current_shanten:
+                if best_shanten is None or s < best_shanten:
+                    best_option = (kind, tile_id)
+                    best_shanten = s
+        return best_option
 
     def choose_chow(self, player_idx: int, tile_id: int,
                     options, game_state):

@@ -158,6 +158,8 @@ def test_ron_shooter_pays_own_share_only():
 def _chicken_gate_game(score_config=None):
     game = GameState([GreedyAgent(f"G{i}") for i in range(4)],
                      seed=0, score_config=score_config)
+    # A live wall, so the discard isn't a "last tile" (which would add tai)
+    game.wall = [0] * 40
     # P1: tenpai chicken hand waiting to pair East Wind (has a flower)
     for t in [0, 1, 2, 12, 13, 14, 19, 19, 19, 24, 25, 26, 27]:
         game.hands[1].add_tile(t)

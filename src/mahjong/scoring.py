@@ -16,9 +16,7 @@ Singapore club conventions:
   - Shooter pays: on ron the discarder pays all three shares.
   - Animals and completed flower series pay out instantly when drawn.
 
-Not yet implemented (arrive with kong mechanics and special hands):
-kong-related tai, robbing the kong, last-tile wins, thirteen orphans,
-heaven/earth wins.
+Not yet implemented (special hands): thirteen orphans, heaven/earth wins.
 """
 
 from dataclasses import dataclass, field
@@ -48,6 +46,9 @@ DEFAULT_TAI_VALUES: Dict[str, int] = {
     "animal": 1,                    # per animal tile
     "complete_flower_series": 1,    # all four of F1-F4 or F5-F8
     "little_three_dragons": 2,      # 小三元 — bonus on top of the two dragon pongs
+    "kong_draw": 1,                 # 杠上开花 — win on the kong replacement tile
+    "rob_kong": 1,                  # 抢杠 — win by robbing an added kong
+    "last_tile": 1,                 # 海底捞月 — win on the final live tile/discard
 }
 
 # Limit hands score ScoreConfig.tai_cap outright.
@@ -74,6 +75,9 @@ TAI_LABELS: Dict[str, str] = {
     "animal": "Animal",
     "complete_flower_series": "Complete flower series (一套花)",
     "little_three_dragons": "Little three dragons (小三元)",
+    "kong_draw": "Win on kong replacement (杠上开花)",
+    "rob_kong": "Robbing the kong (抢杠)",
+    "last_tile": "Last tile (海底捞月)",
     "big_three_dragons": "Big three dragons (大三元)",
     "small_four_winds": "Small four winds (小四喜)",
     "great_four_winds": "Great four winds (大四喜)",
@@ -92,6 +96,8 @@ class ScoreConfig:
     allow_chicken_hand: bool = False # may a 0-tai hand win?
     shooter_pays_all: bool = True    # ron: discarder pays all three shares
     instant_bonus_payouts: bool = True  # animals / flower series pay when drawn
+    instant_kong_payouts: bool = True   # kongs collect chips when declared
+                                        # (1 base exposed/added, 2 concealed)
     tai_values: Dict[str, int] = field(
         default_factory=lambda: dict(DEFAULT_TAI_VALUES))
 
@@ -139,7 +145,9 @@ def is_legal_win(score: HandScore, config: ScoreConfig) -> bool:
 # ── Scoring ───────────────────────────────────────────────────────────
 
 def score_win(hand: Hand, win_tile: int, is_tsumo: bool, seat_index: int,
-              prevailing_wind: int, config: ScoreConfig) -> Optional[HandScore]:
+              prevailing_wind: int, config: ScoreConfig, *,
+              is_kong_draw: bool = False, is_rob_kong: bool = False,
+              is_last_tile: bool = False) -> Optional[HandScore]:
     """Score a winning hand.
 
     Args:
@@ -149,6 +157,9 @@ def score_win(hand: Hand, win_tile: int, is_tsumo: bool, seat_index: int,
         seat_index: 0-3 relative to the dealer (0 = East = dealer)
         prevailing_wind: tile id of the round wind (27-30)
         config: house rules
+        is_kong_draw: won on the replacement tile after declaring a kong
+        is_rob_kong: won by robbing an opponent's added kong
+        is_last_tile: won on the final live tile (draw or discard)
 
     Returns:
         HandScore with the best decomposition's breakdown, or None if the
@@ -167,6 +178,12 @@ def score_win(hand: Hand, win_tile: int, is_tsumo: bool, seat_index: int,
         melds = exposed + concealed_melds
         items = _score_decomposition(
             hand, melds, pair_tile, is_tsumo, seat_wind, prevailing_wind, config)
+        for flag, rule in ((is_kong_draw, "kong_draw"),
+                           (is_rob_kong, "rob_kong"),
+                           (is_last_tile, "last_tile")):
+            tai = config.tai_for(rule)
+            if flag and tai > 0:
+                items.append(TaiItem(rule, tai))
         score = _finalize(items, config)
         if best is None or score.tai > best.tai or (
                 score.tai == best.tai and score.total_tai > best.total_tai):

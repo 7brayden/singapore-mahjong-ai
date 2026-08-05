@@ -74,6 +74,51 @@ class Hand:
         """Record an exposed meld (from pong/chow/kong calls)."""
         self.exposed.append((meld_type, tile_ids))
 
+    def declare_kong(self, kind: str, tile_id: int):
+        """Set aside a kong. The caller draws the replacement tile.
+
+        kind:
+          "concealed" — four copies held in hand (暗杠)
+          "added"     — fourth copy added to an existing exposed pong (加杠)
+          "exposed"   — three copies held, fourth claimed from a discard (明杠)
+        """
+        if kind == "concealed":
+            if self.counts[tile_id] != 4:
+                raise ValueError(f"Concealed kong needs 4x {tile_short(tile_id)}")
+            for _ in range(4):
+                self.remove_tile(tile_id)
+            self.exposed.append(("concealed_kong", [tile_id] * 4))
+        elif kind == "added":
+            for i, (meld_type, tiles) in enumerate(self.exposed):
+                if meld_type == "pong" and tiles[0] == tile_id:
+                    self.remove_tile(tile_id)
+                    self.exposed[i] = ("kong", [tile_id] * 4)
+                    return
+            raise ValueError(f"No exposed pong of {tile_short(tile_id)} to add to")
+        elif kind == "exposed":
+            if self.counts[tile_id] < 3:
+                raise ValueError(f"Exposed kong needs 3x {tile_short(tile_id)} in hand")
+            for _ in range(3):
+                self.remove_tile(tile_id)
+            self.exposed.append(("kong", [tile_id] * 4))
+        else:
+            raise ValueError(f"Unknown kong kind: {kind}")
+
+    def kong_options(self) -> List[Tuple[str, int]]:
+        """Kongs this player could declare on their own turn.
+
+        Returns ("concealed", tile) for each 4-of-a-kind in hand and
+        ("added", tile) for each exposed pong whose fourth copy is held.
+        """
+        options = []
+        for tile_id in range(NUM_STANDARD_UNIQUE):
+            if self.counts[tile_id] == 4:
+                options.append(("concealed", tile_id))
+        for meld_type, tiles in self.exposed:
+            if meld_type == "pong" and self.counts[tiles[0]] >= 1:
+                options.append(("added", tiles[0]))
+        return options
+
     @property
     def num_exposed_melds(self) -> int:
         return len(self.exposed)

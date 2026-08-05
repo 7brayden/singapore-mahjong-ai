@@ -32,19 +32,27 @@ class GreedyAgent(BaseAgent):
 
     def should_claim(self, player_idx: int, tile_id: int,
                      claim_type: str, game_state) -> bool:
-        """Claim a pong if it would improve shanten."""
-        if claim_type != "pong":
-            return False
-
+        """Claim a pong if it improves shanten; claim a kong if it
+        doesn't hurt (the replacement draw and kong tai are free value)."""
         hand = game_state.hands[player_idx]
         counts = hand.copy_counts()
-        if counts[tile_id] < 2:
-            return False
-
         current_shanten = calculate_shanten(counts, hand.num_exposed_melds)
-        counts[tile_id] -= 2
-        new_shanten = calculate_shanten(counts, hand.num_exposed_melds + 1)
-        return new_shanten < current_shanten
+
+        if claim_type == "pong":
+            if counts[tile_id] < 2:
+                return False
+            counts[tile_id] -= 2
+            new_shanten = calculate_shanten(counts, hand.num_exposed_melds + 1)
+            return new_shanten < current_shanten
+
+        if claim_type == "kong":
+            if counts[tile_id] < 3:
+                return False
+            counts[tile_id] -= 3
+            new_shanten = calculate_shanten(counts, hand.num_exposed_melds + 1)
+            return new_shanten <= current_shanten
+
+        return False
 
     def choose_chow(self, player_idx: int, tile_id: int,
                     options, game_state):
@@ -53,6 +61,29 @@ class GreedyAgent(BaseAgent):
         best_pair, _ = best_chow_option(hand.copy_counts(),
                                         hand.num_exposed_melds, options)
         return best_pair
+
+    def choose_kong(self, player_idx: int, options, game_state):
+        """Declare any kong that doesn't worsen shanten — the replacement
+        draw and kong payouts are free value when the shape survives."""
+        hand = game_state.hands[player_idx]
+        counts = hand.copy_counts()
+        current_shanten = calculate_shanten(counts, hand.num_exposed_melds)
+
+        best_option = None
+        best_shanten = None
+        for kind, tile_id in options:
+            test = counts[:]
+            if kind == "concealed":
+                test[tile_id] -= 4
+                s = calculate_shanten(test, hand.num_exposed_melds + 1)
+            else:  # added kong: the pong stays one meld
+                test[tile_id] -= 1
+                s = calculate_shanten(test, hand.num_exposed_melds)
+            if s <= current_shanten:
+                if best_shanten is None or s < best_shanten:
+                    best_option = (kind, tile_id)
+                    best_shanten = s
+        return best_option
 
 
 if __name__ == "__main__":

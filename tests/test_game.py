@@ -158,7 +158,7 @@ def test_claim_window_opens_on_claimers_discard():
 GOLDEN_GREEDY_MIRROR = [
     (0, 3, "ron", 53, 31),
     (1, 1, "ron", 22, 69),
-    (2, 3, "ron", 29, 59),
+    (2, 2, "tsumo", 30, 56),
 ]
 
 GOLDEN_MIXED_FIELD = [
@@ -185,8 +185,8 @@ def test_golden_mixed_field(seed, winner, win_type, turns, remaining):
 # (seed, tai, value, item rules, payments incl. instant bonuses)
 GOLDEN_SCORING_GREEDY_MIRROR = [
     (0, 1, 1, ["seat_flower"], [0, -7, 8, -1]),
-    (1, 1, 1, ["animal"], [-6, 4, 1, 1]),
-    (2, 2, 2, ["animal", "seat_flower"], [2, -8, -2, 8]),
+    (1, 1, 1, ["animal"], [-3, 4, -2, 1]),
+    (2, 1, 1, ["self_draw"], [-1, -5, -1, 7]),
 ]
 
 

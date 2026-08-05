@@ -14,9 +14,10 @@ Manages the full game loop:
   4. Game ends on: win, wall exhaustion (draw), or no more replacement tiles
 
 Current simplifications:
-  - Kong not yet implemented (declaration, replacement draws, robbing)
   - Single hand per game: no dealer rotation or multi-round sessions yet
     (seat winds and the prevailing wind are fixed at construction)
+  - Kong replacement tiles draw from the front of the wall (same as
+    flower replacements) rather than a separate back-of-wall dead wall
 """
 
 import random
@@ -62,18 +63,36 @@ class BaseAgent:
 
     def should_claim(self, player_idx: int, tile_id: int,
                      claim_type: str, game_state: "GameState") -> bool:
-        """Decide whether to claim a discarded tile for a pong.
+        """Decide whether to claim a discarded tile for a pong or kong.
 
         Args:
             player_idx: which player is deciding
             tile_id: the discarded tile available to claim
-            claim_type: "pong" (kong claims will be added later)
+            claim_type: "pong" or "kong" (kong = 3 copies held; the
+                        claimer draws a replacement tile after melding)
             game_state: current game state
 
         Returns:
             True to claim, False to pass
         """
         return False  # default: never claim
+
+    def choose_kong(self, player_idx: int,
+                    options: List[Tuple[str, int]],
+                    game_state: "GameState") -> Optional[Tuple[str, int]]:
+        """Pick a kong to declare on your own turn, or None to pass.
+
+        Args:
+            player_idx: which player is deciding
+            options: ("concealed", tile) / ("added", tile) declarations
+                     currently available (see Hand.kong_options)
+            game_state: current game state
+
+        Returns:
+            One of the options, or None to pass. Declaring draws a
+            replacement tile; an added kong may be robbed by opponents.
+        """
+        return None  # default: never declare
 
     def choose_chow(self, player_idx: int, tile_id: int,
                     options: List[Tuple[int, int]],
@@ -248,7 +267,7 @@ class GameState:
         """
         counts = [0] * NUM_STANDARD_UNIQUE
 
-        # Own hand
+        # Own concealed hand
         for i in range(NUM_STANDARD_UNIQUE):
             counts[i] += self.hands[player_idx].counts[i]
 
@@ -258,10 +277,10 @@ class GameState:
                 if not is_bonus(tile):
                     counts[tile] += 1
 
-        # Other players' exposed melds (own hand already counted)
+        # ALL exposed melds — including the player's own, since claimed
+        # tiles were removed from hand.counts when the meld was formed.
+        # Concealed kongs are treated as visible (their tiles are dead).
         for p in range(4):
-            if p == player_idx:
-                continue
             for meld_type, meld_tiles in self.hands[p].exposed:
                 for tile in meld_tiles:
                     if not is_bonus(tile):
@@ -275,19 +294,25 @@ class GameState:
 
     # ── Turn execution ────────────────────────────────────────────────
 
-    def _check_pong(self, discarder: int, tile_id: int) -> Optional[int]:
-        """Check if any opponent wants to pong the discarded tile.
+    def _check_pong_or_kong(self, discarder: int,
+                            tile_id: int) -> Optional[Tuple[int, str]]:
+        """Check if any opponent claims the discard as a kong or pong.
 
-        Any player (not the discarder) with 2+ copies can claim.
-        Priority: closest in turn order.
-        Returns claimer index or None.
+        A player holding 3 copies is offered the kong first, then the
+        pong. Only one player can ever hold enough copies, so there is
+        no claim conflict. Priority: closest in turn order.
+
+        Returns (claimer, "kong"|"pong") or None.
         """
         for offset in range(1, 4):
             candidate = (discarder + offset) % 4
             hand = self.hands[candidate]
+            if hand.counts[tile_id] >= 3:
+                if self.agents[candidate].should_claim(candidate, tile_id, "kong", self):
+                    return (candidate, "kong")
             if hand.counts[tile_id] >= 2:
                 if self.agents[candidate].should_claim(candidate, tile_id, "pong", self):
-                    return candidate
+                    return (candidate, "pong")
         return None
 
     def _check_chow(self, discarder: int, tile_id: int) -> Optional[Tuple[int, List[int]]]:
@@ -340,6 +365,18 @@ class GameState:
             hand.tiles.remove(tile_id)
             hand.add_exposed_meld("pong", [tile_id, tile_id, tile_id])
 
+        elif claim_type == "kong":
+            # Remove 3 copies, form the kong, draw a replacement tile.
+            # The replacement may win the hand (kong draw).
+            hand.declare_kong("exposed", tile_id)
+            self._apply_kong_payout(claimer, "exposed")
+            replacement = self._deal_tile_to(claimer)
+            if replacement is None:
+                self._end_game(winner=None, win_type=None)
+                return None
+            if self._try_tsumo(claimer, replacement, is_kong_draw=True):
+                return None
+
         elif claim_type == "chow" and partners:
             # Remove partner tiles from hand, form meld
             for p_tile in partners:
@@ -362,6 +399,74 @@ class GameState:
         hand.discard(discard_tile)
         return discard_tile
 
+    def _try_tsumo(self, p: int, win_tile: int, is_kong_draw: bool) -> bool:
+        """End the game if player p's hand is a legal self-drawn win."""
+        hand = self.hands[p]
+        if not is_winning_hand(hand.counts, hand.num_exposed_melds):
+            return False
+        score = score_win(hand, win_tile, True, self.seat_index(p),
+                          self.prevailing_wind, self.score_config,
+                          is_kong_draw=is_kong_draw,
+                          is_last_tile=self.tiles_remaining <= DEAD_WALL_SIZE)
+        if score is not None and is_legal_win(score, self.score_config):
+            self._end_game(winner=p, win_type="tsumo", score=score)
+            return True
+        return False  # complete but below minimum tai — play on
+
+    def _apply_kong_payout(self, player_idx: int, kind: str):
+        """Instant chips for declaring a kong (house rule, on by default):
+        1 base unit from each player, 2 for a concealed kong."""
+        cfg = self.score_config
+        if not cfg.instant_kong_payouts:
+            return
+        amount = cfg.base_unit * (2 if kind == "concealed" else 1)
+        for q in range(4):
+            if q != player_idx:
+                self.payments[q] -= amount
+                self.payments[player_idx] += amount
+
+    def _kong_phase(self, p: int) -> bool:
+        """Let the active player declare kongs after drawing.
+
+        Each kong grants a replacement draw which may win the hand
+        (kong draw); an added kong may first be robbed by an opponent.
+        Returns True if the game continues, False if it ended.
+        """
+        hand = self.hands[p]
+        while True:
+            options = hand.kong_options()
+            if not options:
+                return True
+            choice = self.agents[p].choose_kong(p, options, self)
+            if choice is None:
+                return True
+            choice = tuple(choice)
+            if choice not in options:
+                raise ValueError(
+                    f"Agent {self.agents[p].name} (P{p}) chose invalid kong "
+                    f"{choice}; options: {options}")
+            kind, tile_id = choice
+
+            if kind == "added":
+                rob = self._check_ron(p, tile_id, is_rob_kong=True)
+                if rob is not None:
+                    winner, score = rob
+                    hand.remove_tile(tile_id)
+                    self.hands[winner].add_tile(tile_id)
+                    self._end_game(winner=winner, win_type="ron",
+                                   dealt_in_by=p, score=score)
+                    return False
+
+            hand.declare_kong(kind, tile_id)
+            self._apply_kong_payout(p, kind)
+
+            replacement = self._deal_tile_to(p)
+            if replacement is None:
+                self._end_game(winner=None, win_type=None)
+                return False
+            if self._try_tsumo(p, replacement, is_kong_draw=True):
+                return False
+
     def _execute_turn(self) -> bool:
         """Execute one turn. Returns True if game continues, False if over."""
         p = self.active_player
@@ -374,15 +479,15 @@ class GameState:
             return False
 
         # 2. Check tsumo (self-draw win) — must meet the minimum tai
-        if is_winning_hand(hand.counts, hand.num_exposed_melds):
-            score = score_win(hand, drawn, True, self.seat_index(p),
-                              self.prevailing_wind, self.score_config)
-            if score is not None and is_legal_win(score, self.score_config):
-                self._end_game(winner=p, win_type="tsumo", score=score)
-                return False
-            # Hand is complete but below minimum tai — play on
+        if self._try_tsumo(p, drawn, is_kong_draw=False):
+            return False
 
-        # 3. Agent chooses discard
+        # 3. Kong declarations (concealed or added), each with a
+        #    replacement draw and possible kong-draw win or robbed kong
+        if not self._kong_phase(p):
+            return False
+
+        # 4. Agent chooses discard
         discard_tile = self.agents[p].choose_discard(p, self)
 
         # Validate
@@ -400,13 +505,15 @@ class GameState:
         #    for each claimer's follow-up discard)
         return self._resolve_discard(p, discard_tile)
 
-    def _check_ron(self, discarder: int,
-                   tile_id: int) -> Optional[Tuple[int, HandScore]]:
-        """Check whether any opponent legally wins on the discarded tile.
+    def _check_ron(self, discarder: int, tile_id: int, *,
+                   is_rob_kong: bool = False,
+                   is_last_tile: bool = False) -> Optional[Tuple[int, HandScore]]:
+        """Check whether any opponent legally wins on the tile.
 
-        A hand must both complete AND meet the minimum tai to ron.
-        Every opponent with a legal win counts as a deal-in for the
-        discarder; the winner is the closest in turn order.
+        Used for discards (ron) and for robbing an added kong. A hand
+        must both complete AND meet the minimum tai to win. Every
+        opponent with a legal win counts as a deal-in for the discarder
+        (or kong declarer); the winner is the closest in turn order.
         """
         winner = None
         winning_score = None
@@ -417,7 +524,9 @@ class GameState:
             if is_winning_hand(opp_hand.counts, opp_hand.num_exposed_melds):
                 score = score_win(opp_hand, tile_id, False,
                                   self.seat_index(opponent),
-                                  self.prevailing_wind, self.score_config)
+                                  self.prevailing_wind, self.score_config,
+                                  is_rob_kong=is_rob_kong,
+                                  is_last_tile=is_last_tile)
                 if score is not None and is_legal_win(score, self.score_config):
                     if winner is None:
                         winner = opponent
@@ -429,14 +538,16 @@ class GameState:
         return (winner, winning_score)
 
     def _resolve_discard(self, discarder: int, tile_id: int) -> bool:
-        """Resolve claims on a discard with priority ron > pong > chow.
+        """Resolve claims on a discard with priority ron > kong/pong > chow.
 
-        When a pong/chow is claimed, the claimer discards and that new
-        discard opens a fresh claim window (ron, pong, chow) — resolved
-        by looping. Returns True if the game continues, False if over.
+        When a claim is made, the claimer discards and that new discard
+        opens a fresh claim window — resolved by looping. A kong claim
+        may end the game inside _execute_claim (kong-draw win or wall
+        exhausted). Returns True if the game continues, False if over.
         """
         while True:
-            ron_result = self._check_ron(discarder, tile_id)
+            is_last = self.tiles_remaining <= DEAD_WALL_SIZE
+            ron_result = self._check_ron(discarder, tile_id, is_last_tile=is_last)
             if ron_result is not None:
                 ron_winner, score = ron_result
                 self.hands[ron_winner].add_tile(tile_id)
@@ -444,12 +555,15 @@ class GameState:
                                dealt_in_by=discarder, score=score)
                 return False
 
-            pong_claimer = self._check_pong(discarder, tile_id)
-            if pong_claimer is not None:
+            claim = self._check_pong_or_kong(discarder, tile_id)
+            if claim is not None:
+                claimer, claim_type = claim
                 # Remove the tile from the discard pile (it was just added)
                 self.hands[discarder].discards.pop()
-                tile_id = self._execute_claim(pong_claimer, tile_id, "pong")
-                discarder = pong_claimer
+                tile_id = self._execute_claim(claimer, tile_id, claim_type)
+                if tile_id is None:
+                    return False  # game ended inside the claim
+                discarder = claimer
                 continue
 
             chow_result = self._check_chow(discarder, tile_id)

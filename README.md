@@ -64,7 +64,7 @@ One caveat: the advisor only optimises for hand efficiency. It doesn't track opp
 src/mahjong/
 ├── tiles.py               # Tile encoding (integers 0-33), suits, wall creation
 ├── hand.py                # Hand management, shanten, discard evaluation
-├── game.py                # Game loop: draw, discard, tsumo, ron, pong/chow
+├── game.py                # Game loop: draw, discard, tsumo, ron, pong/chow/kong
 ├── defense.py             # Danger scoring for discard candidates
 ├── opponent_model.py      # Estimates how close each opponent is to winning
 ├── scoring.py             # Tai scoring, payments, house-rule config
@@ -114,6 +114,7 @@ Every win is scored as a list of named tai items (`scoring.py`), so the UI can s
 | Matching seat flower / animal | 1 each |
 | Complete flower series (一套花) | 1 |
 | Dragon triplet / seat wind / prevailing wind | 1 each |
+| Kong replacement win (杠上开花) / robbing the kong (抢杠) / last tile (海底捞月) | 1 each |
 | All triplets (碰碰胡) | 2 |
 | Half flush (混一色) | 2 |
 | Little three dragons (小三元) | +2 over the dragon pongs |
@@ -121,7 +122,7 @@ Every win is scored as a list of named tai items (`scoring.py`), so the UI can s
 | Ping Hu — all chows, no bonus tiles (平胡) | 4 |
 | Big three dragons, four winds, all honors, all terminals | limit (5) |
 
-House rules live in `ScoreConfig` and are all adjustable: minimum 1 tai to win (chicken hands blocked by default), shooter pays all three shares on a ron, tsumo collects from everyone, and animals/completed flower series pay out instantly when drawn. Kong-related tai, thirteen orphans, and heaven/earth wins arrive with kong mechanics.
+House rules live in `ScoreConfig` and are all adjustable: minimum 1 tai to win (chicken hands blocked by default), shooter pays all three shares on a ron, tsumo collects from everyone, animals/completed flower series pay out instantly when drawn, and kongs collect instantly too (1 base unit from each player, 2 for a concealed kong). Special hands (thirteen orphans, heaven/earth wins) are not yet implemented.
 
 ## Benchmark results
 
@@ -182,8 +183,8 @@ python3 experiments/generate_plots.py     # result charts (needs matplotlib)
 
 ## Future work
 
-- Kong mechanics (exposed/concealed/added, replacement draws, robbing the kong) plus kong tai, thirteen orphans, heaven/earth wins
-- Seat/prevailing winds, dealer rotation, multi-round sessions
+- Special hands: thirteen orphans, heaven/earth wins
+- Dealer rotation and multi-round sessions with running scores
 - Human-in-the-loop play: FastAPI backend + React UI with live stats (shanten, danger, opponent threat) so players learn while they play
 - LLM-powered move explanations grounded in the engine's analysis
 - Learned danger model trained on simulation data
