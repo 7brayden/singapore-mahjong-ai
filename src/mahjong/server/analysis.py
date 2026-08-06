@@ -12,13 +12,15 @@ from mahjong.game import GameState
 from mahjong.hand import calculate_shanten, evaluate_discards, get_winning_tiles
 from mahjong.defense import estimate_danger_detailed
 from mahjong.opponent_model import estimate_opponent_threats
-from mahjong.ml.features import danger_features
-from mahjong.ml.model import load_danger_model
+from mahjong.ml.features import danger_features, outcome_features
+from mahjong.ml.model import load_danger_model, load_win_model
 
-# Trained deal-in model (None until the ML pipeline has been run once).
-# Unlike the heuristic danger score, its output is a calibrated
-# probability: "this discard deals in X% of the time".
+# Trained models (None until the ML pipeline has been run once).
+# Unlike the heuristic danger score, their outputs are calibrated
+# probabilities: "this discard deals in X% of the time", "this hand
+# wins Y% of the time from here".
 _danger_model = load_danger_model()
+_win_model = load_win_model()
 
 
 def analyze_seat(game: GameState, seat: int) -> Dict:
@@ -57,6 +59,10 @@ def analyze_seat(game: GameState, seat: int) -> Dict:
             if _danger_model is not None:
                 x = danger_features(e["tile_id"], seat, game, visible, threat_data)
                 entry["deal_in_prob"] = round(_danger_model.predict(x), 4)
+            if _win_model is not None:
+                w = outcome_features(seat, game, e["shanten"],
+                                     e["acceptance"], threat_data)
+                entry["win_prob"] = round(_win_model.predict(w), 4)
             discards.append(entry)
         analysis["discards"] = discards
     elif shanten == 0:

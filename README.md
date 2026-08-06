@@ -161,9 +161,35 @@ nothing proven safe), its calibrated ~2% probabilities flatten the defense term,
 and the agent drifts toward pure offense — dealing in *more* than the crudely
 fearful heuristic it replaced. A calibrated probability squashed into a slot
 built for an inflated 0–1 danger score loses the caution the blend was balanced
-around. The fix is not another tuned constant; it's making the decision an
-expected-value comparison — `P(deal-in) × ron cost` against `ΔP(win) × hand
-value` — using both trained models. That's the next phase.
+around.
+
+### The fix: decide in points, not scores
+
+The current LearnedAgent scores every candidate discard in actual points:
+
+```
+EV(tile) = P(win | hand after discard) × 7.65  −  P(deal-in on tile) × 5.94
+```
+
+— both probabilities from the trained models, both stakes measured empirically
+over seeded games. No normalisation, no dynamic weights, no squash. Folding
+emerges naturally: with a hopeless hand every candidate's P(win) is flat and
+tiny, so the risk term decides and the agent discards its safest tile without
+an explicit "defense mode".
+
+| 300 games each, seats alternate | Win% | DI/disc% | Net pts/game |
+|---|---|---|---|
+| Mirror: 4× Learned | 21.6/seat | 1.35 | — |
+| vs Hybrid — Hybrid / **Learned** | 25.3 / 20.7 | 1.50 / **1.22** | +0.10 / −0.10 |
+| vs Greedy — Greedy / **Learned** | 28.5 / 19.8 | 1.87 / **1.62** | +0.15 / −0.15 |
+
+The deal-in result fully reversed: the EV agent is now the safest at the table
+in every matchup (the squash version dealt in at 1.90 against Hybrid; the EV
+version deals in at 1.22 *while Hybrid rose to 1.50 against it*). Net points
+against Hybrid are within noise of parity. The honest remaining gap is win
+rate — the EV agent folds more, and its myopic formula values every win at the
+same 7.65 points, so it can't tell a cheap hand worth abandoning from a
+half-flush worth pushing. Value-aware win estimates are the next step.
 
 ## Scoring (tai)
 
@@ -309,7 +335,7 @@ python3 experiments/generate_plots.py     # result charts (needs matplotlib)
 - Post-game review screen ("Review game with coach") over a hand event log
 - Multi-hand browser sessions backed by session.py (dealer rotation in the UI)
 - LLM move explanations (`/explain`) grounded in the analysis endpoint + RAG strategy corpus
-- Win-probability model in the push/fold decision (EV-aware play)
+- Value-aware win model (predict points, not just P(win)) so the EV agent pushes big hands
 - Lookahead: sample future draws, estimate discard value
 - Tune hybrid weights to detected opponent strength
 

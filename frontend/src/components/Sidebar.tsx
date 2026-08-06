@@ -42,7 +42,10 @@ function candidateNote(c: DiscardAnalysis, isBest: boolean): string {
   if (c.deal_in_prob === undefined) return base;
   const p = c.deal_in_prob * 100;
   const pTxt = p >= 10 ? p.toFixed(0) : p.toFixed(1);
-  return `${base} Trained model: deals in ${pTxt}% of the time from here.`;
+  const winTxt = c.win_prob !== undefined
+    ? ` and wins ${(c.win_prob * 100).toFixed(0)}% of hands from here`
+    : "";
+  return `${base} Trained model: deals in ${pTxt}% of the time${winTxt}.`;
 }
 
 function tellFor(threat: number, suits: Record<string, number>): [string, string] {

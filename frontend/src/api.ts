@@ -72,6 +72,8 @@ export interface DiscardAnalysis {
   };
   /** Calibrated P(deal-in) from the trained model; absent if untrained. */
   deal_in_prob?: number;
+  /** Calibrated P(win from here) from the trained model. */
+  win_prob?: number;
 }
 
 export interface OpponentAnalysis {
