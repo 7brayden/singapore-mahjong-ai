@@ -200,3 +200,22 @@ def test_golden_scoring(seed, tai, value, rules, payments):
     assert [item.rule for item in score.items] == rules
     assert result.payments == payments
     assert sum(result.payments) == 0
+
+
+# ── Turn order ────────────────────────────────────────────────────────
+
+@pytest.mark.parametrize("dealer", [0, 1, 2, 3])
+def test_dealer_acts_first(dealer):
+    """East (the dealer) always draws and discards first.
+
+    Regression: active_player was hardcoded to 0, so every hand after the
+    first in a session started with the wrong seat.
+    """
+    game = GameState([GreedyAgent(f"G{i}") for i in range(4)],
+                     seed=7, dealer=dealer)
+    request = next(game.step_game())
+    assert request.player == dealer
+    assert len(game.hands[dealer].tiles) == 14   # drew before discarding
+    for other in range(4):
+        if other != dealer:
+            assert len(game.hands[other].tiles) == 13

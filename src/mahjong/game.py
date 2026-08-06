@@ -218,7 +218,8 @@ class GameState:
         self.wall: List[int] = []
         self.wall_idx: int = 0
         self.turn: int = 0
-        self.active_player: int = 0
+        # East (the dealer) always draws and discards first.
+        self.active_player: int = dealer
         self.game_over: bool = False
         self.result: Optional[GameResult] = None
 
