@@ -207,10 +207,14 @@ Every win is scored as a list of named tai items (`scoring.py`), so the UI can s
 | Half flush (混一色) | 2 |
 | Little three dragons (小三元) | +2 over the dragon pongs |
 | Full flush (清一色) | 4 |
-| Ping Hu — all chows, no bonus tiles (平胡) | 4 |
+| Ping Hu — all chows, non-honor pair, zero bonus tiles (平胡) | 4 |
+| Chou ping hu — same shape but holding flowers/animals (臭平胡) | 1 |
+| Concealed ping hu — either variant with no claimed melds (门清平胡) | +1 |
 | Big three dragons, four winds, all honors, all terminals | limit (6 by default) |
 
 House rules live in `ScoreConfig` and are all adjustable: minimum 1 tai to win (chicken hands blocked by default), shooter pays all three shares on a ron, tsumo collects from everyone, animals/completed flower series pay out instantly when drawn, and kongs collect instantly too (1 base unit from each player, 2 for a concealed kong). Special hands (thirteen orphans, heaven/earth wins) are not yet implemented.
+
+**Wall mechanics.** Normal turn draws come off the front of the wall; replacement draws — after a flower, an animal, or a kong — come off the back, as at a real table. The hand ends in a draw when 15 live tiles remain, regardless of which end they left from. East (the dealer) always draws first.
 
 ## Sessions
 

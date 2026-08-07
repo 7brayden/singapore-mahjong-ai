@@ -36,6 +36,8 @@ DEFAULT_TAI_VALUES: Dict[str, int] = {
     "self_draw": 1,                 # 自摸 — win by own draw
     "no_bonus_tiles": 1,            # 无花 — zero flowers and animals
     "ping_hu": 4,                   # 平胡 — all chows, non-honor pair, no bonus tiles
+    "chou_ping_hu": 1,              # 臭平胡 — ping hu shape, but holding flowers/animals
+    "ping_hu_concealed": 1,         # 门清平胡 — ping hu with no claimed melds, +1
     "all_triplets": 2,              # 碰碰胡 — every meld a pong/kong
     "half_flush": 2,                # 混一色 — one suit plus honors
     "full_flush": 4,                # 清一色 — one suit only
@@ -65,6 +67,8 @@ TAI_LABELS: Dict[str, str] = {
     "self_draw": "Self-draw (自摸)",
     "no_bonus_tiles": "No flowers or animals (无花)",
     "ping_hu": "Ping Hu — all chows, no bonus tiles (平胡)",
+    "chou_ping_hu": "Chou ping hu — all chows with bonus tiles (臭平胡)",
+    "ping_hu_concealed": "Concealed ping hu (门清平胡)",
     "all_triplets": "All triplets (碰碰胡)",
     "half_flush": "Half flush (混一色)",
     "full_flush": "Full flush (清一色)",
@@ -238,8 +242,14 @@ def _score_decomposition(hand: Hand, melds: List[Tuple[str, int]], pair_tile: in
         return items
 
     # ── Hand patterns ─────────────────────────────────────────────────
-    if len(chows) == 4 and not is_honor(pair_tile) and not has_bonus:
-        add("ping_hu")
+    # Ping hu family (house rule): the clean version — all chows,
+    # non-honor pair, zero bonus tiles — scores full value. The same
+    # shape holding any flower/animal degrades to chou ping hu (臭平胡).
+    # A ping hu with no claimed melds adds the concealed bonus.
+    if len(chows) == 4 and not is_honor(pair_tile):
+        add("chou_ping_hu" if has_bonus else "ping_hu")
+        if hand.num_exposed_melds == 0:
+            add("ping_hu_concealed")
     if len(pongs) == 4:
         add("all_triplets")
     if len(suits_used) == 1:

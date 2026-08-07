@@ -156,14 +156,14 @@ def test_claim_window_opens_on_claimers_discard():
 # commit message.
 
 GOLDEN_GREEDY_MIRROR = [
-    (0, 3, "ron", 53, 31),
-    (1, 1, "ron", 22, 69),
-    (2, 2, "tsumo", 30, 56),
+    (0, 3, "ron", 35, 51),
+    (1, 0, "tsumo", 33, 55),
+    (2, 0, "ron", 16, 73),
 ]
 
 GOLDEN_MIXED_FIELD = [
-    (0, 0, "ron", 50, 34),
-    (1, 1, "ron", 50, 38),
+    (0, 0, "ron", 38, 48),
+    (1, 0, "tsumo", 53, 31),
 ]
 
 
@@ -184,9 +184,9 @@ def test_golden_mixed_field(seed, winner, win_type, turns, remaining):
 
 # (seed, tai, value, item rules, payments incl. instant bonuses)
 GOLDEN_SCORING_GREEDY_MIRROR = [
-    (0, 1, 1, ["seat_flower"], [0, -7, 8, -1]),
-    (1, 1, 1, ["animal"], [-3, 4, -2, 1]),
-    (2, 1, 1, ["self_draw"], [-1, -5, -1, 7]),
+    (0, 3, 4, ["chou_ping_hu", "ping_hu_concealed", "animal"], [-3, -11, 1, 13]),
+    (1, 2, 2, ["no_bonus_tiles", "self_draw"], [1, -3, 9, -7]),
+    (2, 1, 1, ["animal"], [5, -2, -5, 2]),
 ]
 
 
@@ -219,3 +219,17 @@ def test_dealer_acts_first(dealer):
     for other in range(4):
         if other != dealer:
             assert len(game.hands[other].tiles) == 13
+
+
+# ── Wall: replacement draws come off the back ─────────────────────────
+
+def test_flower_replacement_draws_from_back():
+    game = GameState([GreedyAgent(f"G{i}") for i in range(4)], seed=0)
+    # Front: a flower then junk; the very back tile is 7 (8-wan)
+    game.wall = [34] + [0] * 30 + [7]
+    drawn = game._deal_tile_to(0)
+    assert drawn == 7                       # replacement came off the back
+    assert game.hands[0].flowers == [34]    # flower set aside
+    assert game.tiles_remaining == 30       # one off each end
+    # The junk in the middle was untouched
+    assert game.wall[game.wall_idx] == 0

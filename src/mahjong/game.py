@@ -217,6 +217,10 @@ class GameState:
         self.hands: List[Hand] = [Hand() for _ in range(4)]
         self.wall: List[int] = []
         self.wall_idx: int = 0
+        # Back-of-wall pointer: replacement draws (flowers, animals,
+        # kongs) come off the BACK of the wall, as at a real table.
+        # None means "no back draws yet" → the back is len(wall).
+        self._wall_end: Optional[int] = None
         self.turn: int = 0
         # East (the dealer) always draws and discards first.
         self.active_player: int = dealer
@@ -239,35 +243,65 @@ class GameState:
     # ── Wall and drawing ──────────────────────────────────────────────
 
     @property
+    def _wall_limit(self) -> int:
+        """One past the last live wall index (back draws shrink this)."""
+        return self._wall_end if self._wall_end is not None else len(self.wall)
+
+    @property
     def tiles_remaining(self) -> int:
-        return len(self.wall) - self.wall_idx
+        return self._wall_limit - self.wall_idx
 
     def _draw_tile(self) -> Optional[int]:
-        """Draw the next tile from the wall. Returns None if only dead wall remains."""
+        """Draw from the FRONT of the wall (normal turn draws).
+
+        Returns None once only the 15-tile dead wall remains — the hand
+        ends in a draw.
+        """
         if self.tiles_remaining <= DEAD_WALL_SIZE:
             return None
         tile = self.wall[self.wall_idx]
         self.wall_idx += 1
         return tile
 
-    def _deal_tile_to(self, player_idx: int) -> Optional[int]:
+    def _draw_replacement(self) -> Optional[int]:
+        """Draw from the BACK of the wall.
+
+        Replacement draws — after a flower/animal or a kong — come off
+        the back, per table practice. The same 15-tile dead wall gate
+        applies: the count of live tiles is what ends the hand, no
+        matter which end they left from.
+        """
+        if self.tiles_remaining <= DEAD_WALL_SIZE:
+            return None
+        end = self._wall_limit - 1
+        self._wall_end = end
+        return self.wall[end]
+
+    def _deal_tile_to(self, player_idx: int,
+                      from_back: bool = False) -> Optional[int]:
         """Draw a tile and add it to a player's hand.
 
         Handles bonus tiles: if a flower/animal is drawn, it's set aside
-        and a replacement is drawn. Repeats until a standard tile is drawn
-        or the wall is exhausted.
+        and a replacement is drawn FROM THE BACK of the wall. Repeats
+        until a standard tile is drawn or the wall is exhausted.
+
+        from_back=True makes the first draw a back draw too — used for
+        kong replacements.
 
         Returns the final standard tile added, or None if wall exhausted.
         """
+        take_back = from_back
         while True:
-            tile = self._draw_tile()
+            tile = self._draw_replacement() if take_back else self._draw_tile()
             if tile is None:
                 return None
 
             is_flower = self.hands[player_idx].add_tile(tile)
             if is_flower:
-                # Bonus tile — set aside, pay instant bonus, draw replacement
+                # Bonus tile — set aside, pay instant bonus, then the
+                # replacement comes off the back of the wall.
                 self._apply_instant_bonus(player_idx, tile)
+                take_back = True
                 continue
             else:
                 return tile
@@ -304,6 +338,7 @@ class GameState:
         """Build wall, deal 13 tiles to each player, handle bonus replacements."""
         self.wall = create_wall()
         self.rng.shuffle(self.wall)
+        self._wall_end = None
 
         for _ in range(13):
             for p in range(4):
@@ -424,7 +459,7 @@ class GameState:
             # The replacement may win the hand (kong draw).
             hand.declare_kong("exposed", tile_id)
             self._apply_kong_payout(claimer, "exposed")
-            replacement = self._deal_tile_to(claimer)
+            replacement = self._deal_tile_to(claimer, from_back=True)
             if replacement is None:
                 self._end_game(winner=None, win_type=None)
                 return None
@@ -516,7 +551,7 @@ class GameState:
             hand.declare_kong(kind, tile_id)
             self._apply_kong_payout(p, kind)
 
-            replacement = self._deal_tile_to(p)
+            replacement = self._deal_tile_to(p, from_back=True)
             if replacement is None:
                 self._end_game(winner=None, win_type=None)
                 return False

@@ -109,7 +109,9 @@ def test_kong_claim_draws_replacement_and_discards():
 # ── Engine: kong-draw win (杠上开花) ──────────────────────────────────
 
 def test_kong_replacement_win_scores_kong_draw():
-    game = make_game(wall=[24, 23] + [0] * 40)  # draw 8s, replacement 6s
+    # Turn draw (8s) comes off the FRONT; the kong replacement (6s)
+    # comes off the BACK of the wall.
+    game = make_game(wall=[24] + [0] * 40 + [23])
     game.active_player = 0
     # P0: 5w x4 + 1w2w3w + 1t pong + 9s pair + 8s → after drawing a second
     # 8s: kong 5w, replacement 6s completes 6s7s8s... build the wait:

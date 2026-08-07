@@ -29,13 +29,41 @@ CFG = ScoreConfig()
 
 # ── Individual tai rules ──────────────────────────────────────────────
 
-def test_ping_hu_strict():
-    # All chows, non-honor pair, zero bonus tiles = 4 tai
-    hand = make_hand([0, 1, 2, 3, 4, 5, 9, 10, 11, 21, 22, 23, 25, 25])
+PING_HU_TILES = [0, 1, 2, 3, 4, 5, 9, 10, 11, 21, 22, 23, 25, 25]
+
+
+def test_ping_hu_concealed_clean():
+    # All chows, non-honor pair, zero bonus tiles, no claimed melds:
+    # ping hu 4 + concealed 1 = 5 tai
+    hand = make_hand(PING_HU_TILES)
     score = score_win(hand, 2, False, 0, WIND_START, CFG)
+    assert rules_of(score) == ["ping_hu", "ping_hu_concealed"]
+    assert score.tai == 5
+    assert score.value == 16  # 2^(5-1)
+
+
+def test_ping_hu_exposed_clean():
+    # Same shape with a claimed chow: 4 tai, no concealed bonus
+    hand = make_hand(PING_HU_TILES[3:])
+    hand.add_exposed_meld("chow", [0, 1, 2])
+    score = score_win(hand, 5, False, 0, WIND_START, CFG)
     assert rules_of(score) == ["ping_hu"]
     assert score.tai == 4
-    assert score.value == 8  # 2^(4-1)
+
+
+def test_chou_ping_hu():
+    # Ping hu shape holding a flower: degrades to chou ping hu (臭平胡),
+    # 1 tai (+1 concealed here = 2)
+    hand = make_hand(PING_HU_TILES, flowers=[35])
+    score = score_win(hand, 2, False, 0, WIND_START, CFG)
+    assert rules_of(score) == ["chou_ping_hu", "ping_hu_concealed"]
+    assert score.tai == 2
+
+    exposed = make_hand(PING_HU_TILES[3:], flowers=[35])
+    exposed.add_exposed_meld("chow", [0, 1, 2])
+    score = score_win(exposed, 5, False, 0, WIND_START, CFG)
+    assert rules_of(score) == ["chou_ping_hu"]
+    assert score.tai == 1
 
 
 def test_chicken_hand_scores_zero():
@@ -70,9 +98,9 @@ def test_tai_cap_is_configurable():
 
 def test_base_unit_scales_values():
     cfg = ScoreConfig(base_unit=5)
-    hand = make_hand([0, 1, 2, 3, 4, 5, 9, 10, 11, 21, 22, 23, 25, 25])
-    score = score_win(hand, 2, False, 0, WIND_START, cfg)  # ping hu, 4 tai
-    assert score.value == 5 * 2 ** 3  # 40 chips
+    hand = make_hand(PING_HU_TILES)
+    score = score_win(hand, 2, False, 0, WIND_START, cfg)  # concealed ping hu, 5 tai
+    assert score.value == 5 * 2 ** 4  # 80 chips
 
 
 def test_full_flush():
@@ -154,18 +182,18 @@ def test_tsumo_payments():
 
 
 def test_ron_shooter_pays_all():
-    hand = make_hand([0, 1, 2, 3, 4, 5, 9, 10, 11, 21, 22, 23, 25, 25])
-    score = score_win(hand, 2, False, 0, WIND_START, CFG)  # ping hu, value 8
+    hand = make_hand(PING_HU_TILES)
+    score = score_win(hand, 2, False, 0, WIND_START, CFG)  # concealed ping hu, value 16
     payments = compute_win_payments(score, winner=1, dealt_in_by=3, config=CFG)
-    assert payments == [0, 24, 0, -24]
+    assert payments == [0, 48, 0, -48]
 
 
 def test_ron_shooter_pays_own_share_only():
     cfg = ScoreConfig(shooter_pays_all=False)
-    hand = make_hand([0, 1, 2, 3, 4, 5, 9, 10, 11, 21, 22, 23, 25, 25])
+    hand = make_hand(PING_HU_TILES)
     score = score_win(hand, 2, False, 0, WIND_START, cfg)
     payments = compute_win_payments(score, winner=1, dealt_in_by=3, config=cfg)
-    assert payments == [0, 8, 0, -8]
+    assert payments == [0, 16, 0, -16]
 
 
 # ── Engine integration: the minimum-tai gate ──────────────────────────
