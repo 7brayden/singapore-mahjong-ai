@@ -163,7 +163,7 @@ GOLDEN_GREEDY_MIRROR = [
 
 GOLDEN_MIXED_FIELD = [
     (0, 0, "ron", 38, 48),
-    (1, 0, "tsumo", 53, 31),
+    (1, 1, "ron", 56, 28),
 ]
 
 
@@ -184,9 +184,9 @@ def test_golden_mixed_field(seed, winner, win_type, turns, remaining):
 
 # (seed, tai, value, item rules, payments incl. instant bonuses)
 GOLDEN_SCORING_GREEDY_MIRROR = [
-    (0, 3, 4, ["chou_ping_hu", "ping_hu_concealed", "animal"], [-3, -11, 1, 13]),
-    (1, 2, 2, ["no_bonus_tiles", "self_draw"], [1, -3, 9, -7]),
-    (2, 1, 1, ["animal"], [5, -2, -5, 2]),
+    (0, 3, 4, ["chou_ping_hu", "ping_hu_concealed", "animal"], [0, -12, 0, 12]),
+    (1, 1, 1, ["no_bonus_tiles"], [3, -1, -1, -1]),
+    (2, 1, 1, ["animal"], [3, 0, -3, 0]),
 ]
 
 

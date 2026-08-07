@@ -79,10 +79,11 @@ def test_chicken_hand_scores_zero():
 
 def test_all_triplets_half_flush_stack_and_cap():
     # Pongs of 1w/3w/5w/Rd + 7w pair, self-drawn, no flowers:
-    # all_triplets 2 + half_flush 2 + dragon 1 + self_draw 1 + no_bonus 1 = 7 → cap 6
+    # all_triplets 2 + half_flush 2 + dragon 1 + no_bonus 1 = 6 → at cap
+    # (self-draw adds no tai at this table — it only changes who pays)
     hand = make_hand([0, 0, 0, 2, 2, 2, 4, 4, 4, 31, 31, 31, 6, 6])
     score = score_win(hand, 4, True, 0, WIND_START, CFG)
-    assert score.total_tai == 7
+    assert score.total_tai == 6
     assert score.tai == 6
     assert score.is_limit
     assert score.value == 32
@@ -161,13 +162,39 @@ def test_flowers_and_animals():
     assert score.tai == 3
 
 
-def test_self_draw_makes_chicken_legal():
-    # Same chicken shape, but won by self-draw: 1 tai, legal
+def test_self_draw_adds_no_tai():
+    # House rule: 自摸 changes who pays, not the tai. A chicken shape won
+    # by self-draw is still 0 tai — and still can't win.
     hand = make_hand([0, 1, 2, 12, 13, 14, 19, 19, 19, 24, 25, 26, 27, 27],
                      flowers=[40])
     score = score_win(hand, 27, True, 0, WIND_START, CFG)
+    assert score.items == []
+    assert not is_legal_win(score, CFG)
+
+    # The old convention is one config line away
+    tsumo_tai = ScoreConfig(tai_values={**CFG.tai_values, "self_draw": 1})
+    score = score_win(hand, 27, True, 0, WIND_START, tsumo_tai)
     assert rules_of(score) == ["self_draw"]
-    assert is_legal_win(score, CFG)
+    assert is_legal_win(score, tsumo_tai)
+
+
+def test_all_four_animals_bonus():
+    # Each animal is 1 tai; the complete set adds one more: 4 + 1 = 5
+    hand = make_hand([0, 1, 2, 12, 13, 14, 19, 19, 19, 24, 25, 26, 27, 27],
+                     flowers=[42, 43, 44, 45])
+    score = score_win(hand, 27, False, 1, WIND_START, CFG)
+    assert rules_of(score) == ["animal", "animal", "animal", "animal",
+                               "complete_animals"]
+    assert score.tai == 5
+
+
+def test_ping_hu_tsumo_is_five_tai():
+    # Concealed clean ping hu won by self-draw: ping hu 4 + concealed 1
+    # = 5 tai, NOT 6 — tsumo adds payment reach, not tai.
+    hand = make_hand(PING_HU_TILES)
+    score = score_win(hand, 2, True, 0, WIND_START, CFG)
+    assert rules_of(score) == ["ping_hu", "ping_hu_concealed"]
+    assert score.tai == 5
 
 
 # ── Payments ──────────────────────────────────────────────────────────
@@ -233,8 +260,14 @@ def test_chicken_hand_can_ron_when_house_allows():
 
 # ── Instant bonus payouts ─────────────────────────────────────────────
 
+_PAYOUTS_ON = ScoreConfig(instant_bonus_payouts=True)
+
+
 def test_animal_pays_instantly():
-    game = GameState([GreedyAgent(f"G{i}") for i in range(4)], seed=0)
+    # Instant chips are off by default (tai-only accounting); opt in to
+    # keep the payout machinery covered.
+    game = GameState([GreedyAgent(f"G{i}") for i in range(4)], seed=0,
+                     score_config=_PAYOUTS_ON)
     game.wall = [42] + [0] * 30  # Cat, then padding
     game.wall_idx = 0
     drawn = game._deal_tile_to(0)
@@ -244,7 +277,8 @@ def test_animal_pays_instantly():
 
 
 def test_completed_flower_series_pays_instantly():
-    game = GameState([GreedyAgent(f"G{i}") for i in range(4)], seed=0)
+    game = GameState([GreedyAgent(f"G{i}") for i in range(4)], seed=0,
+                     score_config=_PAYOUTS_ON)
     for f in (34, 35, 36):
         game.hands[0].add_tile(f)
     game.wall = [37] + [0] * 30  # F4 completes the series

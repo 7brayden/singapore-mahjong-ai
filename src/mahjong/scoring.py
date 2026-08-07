@@ -33,7 +33,9 @@ from mahjong.hand import Hand, decompose_winning_hand
 # ── Tai table (defaults; every value is a house rule) ─────────────────
 
 DEFAULT_TAI_VALUES: Dict[str, int] = {
-    "self_draw": 1,                 # 自摸 — win by own draw
+    "self_draw": 0,                 # 自摸 adds NO tai at this table — it only
+                                    # changes who pays (all three). Set to 1
+                                    # to restore tsumo-as-tai.
     "no_bonus_tiles": 1,            # 无花 — zero flowers and animals
     "ping_hu": 4,                   # 平胡 — all chows, non-honor pair, no bonus tiles
     "chou_ping_hu": 1,              # 臭平胡 — ping hu shape, but holding flowers/animals
@@ -46,6 +48,7 @@ DEFAULT_TAI_VALUES: Dict[str, int] = {
     "prevailing_wind_triplet": 1,   # pong/kong of the round wind
     "seat_flower": 1,               # per flower matching own seat number
     "animal": 1,                    # per animal tile
+    "complete_animals": 1,          # all four animals: +1 on top of the four
     "complete_flower_series": 1,    # all four of F1-F4 or F5-F8
     "little_three_dragons": 2,      # 小三元 — bonus on top of the two dragon pongs
     "kong_draw": 1,                 # 杠上开花 — win on the kong replacement tile
@@ -77,6 +80,7 @@ TAI_LABELS: Dict[str, str] = {
     "prevailing_wind_triplet": "Prevailing wind triplet",
     "seat_flower": "Matching seat flower",
     "animal": "Animal",
+    "complete_animals": "All four animals",
     "complete_flower_series": "Complete flower series (一套花)",
     "little_three_dragons": "Little three dragons (小三元)",
     "kong_draw": "Win on kong replacement (杠上开花)",
@@ -99,9 +103,12 @@ class ScoreConfig:
     base_unit: int = 1               # chip value of a 1-tai hand
     allow_chicken_hand: bool = False # may a 0-tai hand win?
     shooter_pays_all: bool = True    # ron: discarder pays all three shares
-    instant_bonus_payouts: bool = True  # animals / flower series pay when drawn
-    instant_kong_payouts: bool = True   # kongs collect chips when declared
-                                        # (1 base exposed/added, 2 concealed)
+    # Tai-only accounting (house decision): instant chip payouts for
+    # bonus tiles and kongs are OFF by default. The machinery stays —
+    # flip these on when the table starts counting money again.
+    instant_bonus_payouts: bool = False  # animals / flower series pay when drawn
+    instant_kong_payouts: bool = False   # kongs collect chips when declared
+                                         # (1 base exposed/added, 2 concealed)
     tai_values: Dict[str, int] = field(
         default_factory=lambda: dict(DEFAULT_TAI_VALUES))
 
@@ -275,6 +282,8 @@ def _score_decomposition(hand: Hand, melds: List[Tuple[str, int]], pair_tile: in
         elif f >= ANIMAL_START:
             add("animal")
     flower_set = set(hand.flowers)
+    if flower_set >= set(range(ANIMAL_START, ANIMAL_START + 4)):
+        add("complete_animals")  # all four: +1 on top of the animal tai
     if flower_set >= set(range(FLOWER_START, FLOWER_START + 4)):
         add("complete_flower_series")
     if flower_set >= set(range(FLOWER_START + 4, FLOWER_START + 8)):

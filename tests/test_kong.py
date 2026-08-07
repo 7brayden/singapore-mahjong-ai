@@ -84,7 +84,9 @@ def test_greedy_declines_kong_that_breaks_hand():
 # ── Engine: kong claim from a discard ─────────────────────────────────
 
 def test_kong_claim_draws_replacement_and_discards():
-    game = make_game()
+    # Instant kong chips are off by default (tai-only accounting);
+    # opt in here to keep the payout machinery covered.
+    game = make_game(score_config=ScoreConfig(instant_kong_payouts=True))
     # P1 holds three 5w; P0 discards the fourth
     for t in [4, 4, 4, 9, 13, 17, 18, 22, 26, 28, 30, 31, 33]:
         game.hands[1].add_tile(t)
@@ -123,8 +125,7 @@ def test_kong_replacement_win_scores_kong_draw():
     assert game.result.win_type == "tsumo"
     rules = [item.rule for item in game.result.winning_score.items]
     assert "kong_draw" in rules
-    assert "self_draw" in rules
-    # Concealed kong payout (2 units each) happened before the win
+    assert "self_draw" not in rules  # 自摸 adds no tai at this table
     assert sum(game.result.payments) == 0
 
 
@@ -169,7 +170,7 @@ def test_last_tile_tsumo_scores_last_tile():
     assert game.result.winner == 0
     rules = [item.rule for item in game.result.winning_score.items]
     assert "last_tile" in rules
-    assert "self_draw" in rules
+    assert "self_draw" not in rules  # 自摸 adds no tai at this table
 
 
 # ── Scoring units ─────────────────────────────────────────────────────
