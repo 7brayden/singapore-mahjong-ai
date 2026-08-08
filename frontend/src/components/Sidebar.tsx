@@ -43,9 +43,12 @@ function candidateNote(c: DiscardAnalysis, isBest: boolean): string {
   const p = c.deal_in_prob * 100;
   const pTxt = p >= 10 ? p.toFixed(0) : p.toFixed(1);
   const winTxt = c.win_prob !== undefined
-    ? ` and wins ${(c.win_prob * 100).toFixed(0)}% of hands from here`
+    ? `, wins ${(c.win_prob * 100).toFixed(0)}% of hands`
     : "";
-  return `${base} Trained model: deals in ${pTxt}% of the time${winTxt}.`;
+  const valueTxt = c.hand_value !== undefined
+    ? `, and the hand it keeps is worth ${c.hand_value >= 0 ? "+" : ""}${c.hand_value.toFixed(1)} pts`
+    : "";
+  return `${base} Trained model: deals in ${pTxt}% of the time${winTxt}${valueTxt}.`;
 }
 
 function tellFor(threat: number, suits: Record<string, number>): [string, string] {

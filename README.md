@@ -178,46 +178,54 @@ around.
 
 ### The fix: decide in points, not scores
 
-The current LearnedAgent scores every candidate discard in actual points:
+The LearnedAgent scores every candidate discard in actual points:
 
 ```
-EV(tile) = P(win | hand after discard) × 8.63  −  P(deal-in on tile) × 8.55
+EV(tile) = (1 − P(deal-in on tile)) × V(hand after discard)  −  P(deal-in on tile) × 8.55
 ```
 
-— both probabilities from the trained models, both stakes measured empirically
-over seeded games. No normalisation, no dynamic weights, no squash. Folding
-emerges naturally: with a hopeless hand every candidate's P(win) is flat and
-tiny, so the risk term decides and the agent discards its safest tile without
-an explicit "defense mode".
+P(deal-in) comes from the danger model. V comes from the **hand-value model**
+(Phase A): expected net points of the post-discard state, fitted on realized
+outcomes over 10,000 games with tai-potential features — flush concentration,
+dragon/wind triplet trajectories, chow-vs-pong shape, banked bonus tai, and
+the two gates this table makes expensive (`is_concealed`, `has_bonus_tiles`).
+An earlier version priced every win at one constant, which is exactly why it
+folded hands worth fighting for.
 
-Those two stakes are nearly equal under this table's rules, and that is
-informative: with instant chip payouts off, a ron is a straight transfer — the
-shooter pays exactly what the winner collects — so risking a deal-in costs
-almost precisely what winning pays.
+The value model's coefficients recover the house rules from outcomes alone:
+`bonus_tai` +1.78 (banked flowers/animals pay), `has_bonus_tiles` **−0.87**
+(net of banked tai, merely holding a bonus tile costs value — the 臭平胡
+degradation, learned, never coded), `run_progress` +0.93 vs `triplet_progress`
++0.12 (ping hu 4 vs all-triplets 2), `is_concealed` +0.36 (门清平胡). Its R²
+is an honest 0.066 (GBM ceiling 0.088): from one mid-hand snapshot, a hand's
+final ledger is mostly future luck — the model's job is ranking candidate
+states, not prophecy.
 
-### The verdict: not yet better than the heuristic
+### The verdict: a genuinely different player, not yet a better one
 
-Measured on the duplicate-seating evaluator (`experiments/duplicate.py`),
-1,000 games, every agent playing every seat on every wall:
+Duplicate-seating evaluation (`experiments/duplicate.py`), 1,000 games, every
+agent playing every seat on every wall:
 
 | | Win% | DI/disc% | Pts/seat |
 |---|---|---|---|
-| Hybrid | 24.0 [22.2, 25.9] | 1.59 [1.42, 1.77] | +0.130 |
-| **Learned (EV)** | 22.1 [20.4, 24.0] | **1.36 [1.21, 1.53]** | −0.130 |
+| Hybrid | 24.5 [22.7, 26.4] | 1.65 [1.49, 1.82] | −0.062 |
+| **Learned (value-aware EV)** | 20.4 [18.7, 22.3] | **1.14 [1.01, 1.29]** | **+0.062** |
 
 ```
-win rate      hybrid − learned = +1.850 pp   z=+1.39  p=0.1650  (not significant)
-deal-in rate  hybrid − learned = +0.223 pp   z=+1.89  p=0.0585  (not significant)
-points diff   +1.040  95% CI [−1.336, +3.416]           (not significant)
+deal-in rate  hybrid − learned = +0.506 pp   z=+4.51  p<0.0001  (significant)
+win rate      hybrid − learned = +4.050 pp   z=+3.07  p=0.0022  (significant)
+points diff   learned +0.500/seed  95% CI [−1.836, +2.836]      (not significant)
 ```
 
-**Nothing here is significant.** The EV agent is the safer discarder and the
-weaker winner, and the two cancel: on net points the confidence interval
-comfortably straddles zero. The honest summary is that a model which is
-overwhelmingly better at *predicting* deal-ins produces an agent that is
-merely *equal* at playing — the gap between a good world model and a good
-policy, which is what the next phase attacks by learning the decision itself
-rather than hand-writing the formula that consumes the predictions.
+The first statistically established differences in the project: the
+value-aware agent deals in **31% less** (p<0.0001) and wins genuinely fewer
+hands (p=0.002) — a real style, not noise. It leads on net points for the
+first time, but the lead is inside the noise band; resolving ±0.5 pts/seed
+would take ~20,000 seeds. Honest summary: value awareness bought a
+statistically real defensive identity and moved the points needle from
+−0.13/seat to +0.06/seat, but "better than the heuristic" remains unproven.
+The claim decisions — still 100% hand-coded rules, ~18% of all decisions —
+are the next learnable surface (Phase B).
 
 ## Scoring (tai)
 

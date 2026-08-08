@@ -74,6 +74,8 @@ export interface DiscardAnalysis {
   deal_in_prob?: number;
   /** Calibrated P(win from here) from the trained model. */
   win_prob?: number;
+  /** Expected net points of the hand this discard keeps (value model). */
+  hand_value?: number;
 }
 
 export interface OpponentAnalysis {

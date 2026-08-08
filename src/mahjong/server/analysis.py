@@ -13,14 +13,28 @@ from mahjong.hand import calculate_shanten, evaluate_discards, get_winning_tiles
 from mahjong.defense import estimate_danger_detailed
 from mahjong.opponent_model import estimate_opponent_threats
 from mahjong.ml.features import danger_features, outcome_features
-from mahjong.ml.model import load_danger_model, load_win_model
+from mahjong.ml.model import (
+    load_danger_model, load_value_model, load_win_model,
+)
 
 # Trained models (None until the ML pipeline has been run once).
-# Unlike the heuristic danger score, their outputs are calibrated
-# probabilities: "this discard deals in X% of the time", "this hand
-# wins Y% of the time from here".
-_danger_model = load_danger_model()
-_win_model = load_win_model()
+# Unlike the heuristic danger score, their outputs are calibrated:
+# "this discard deals in X% of the time", "this hand wins Y% of the
+# time from here", "this hand is worth Z points from here".
+from mahjong.ml.features import DANGER_FEATURES, OUTCOME_FEATURES
+
+
+def _fresh(model, expected_features):
+    """Reject stale artifacts: a model trained on an older feature list
+    must not be fed today's vectors — drop it rather than mis-predict."""
+    if model is None or model.features != list(expected_features):
+        return None
+    return model
+
+
+_danger_model = _fresh(load_danger_model(), DANGER_FEATURES)
+_win_model = _fresh(load_win_model(), OUTCOME_FEATURES)
+_value_model = _fresh(load_value_model(), OUTCOME_FEATURES)
 
 
 def analyze_seat(game: GameState, seat: int) -> Dict:
@@ -59,10 +73,17 @@ def analyze_seat(game: GameState, seat: int) -> Dict:
             if _danger_model is not None:
                 x = danger_features(e["tile_id"], seat, game, visible, threat_data)
                 entry["deal_in_prob"] = round(_danger_model.predict(x), 4)
-            if _win_model is not None:
-                w = outcome_features(seat, game, e["shanten"],
-                                     e["acceptance"], threat_data)
-                entry["win_prob"] = round(_win_model.predict(w), 4)
+            if _win_model is not None or _value_model is not None:
+                counts_after = hand.copy_counts()
+                counts_after[e["tile_id"]] -= 1
+                w = outcome_features(seat, game, counts_after,
+                                     e["shanten"], e["acceptance"],
+                                     threat_data)
+                if _win_model is not None:
+                    entry["win_prob"] = round(_win_model.predict(w), 4)
+                if _value_model is not None:
+                    # Expected net points of the hand this discard keeps
+                    entry["hand_value"] = round(_value_model.predict(w), 3)
             discards.append(entry)
         analysis["discards"] = discards
     elif shanten == 0:

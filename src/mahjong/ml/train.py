@@ -25,16 +25,19 @@ import subprocess
 from datetime import date
 
 import numpy as np
-from sklearn.ensemble import HistGradientBoostingClassifier
-from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import (
+    HistGradientBoostingClassifier, HistGradientBoostingRegressor,
+)
+from sklearn.linear_model import LogisticRegression, Ridge
 from sklearn.metrics import (
-    average_precision_score, brier_score_loss, log_loss, roc_auc_score,
+    average_precision_score, brier_score_loss, log_loss,
+    mean_absolute_error, r2_score, roc_auc_score,
 )
 from sklearn.preprocessing import StandardScaler
 
 from mahjong.ml.features import DANGER_FEATURES, OUTCOME_FEATURES
 from mahjong.ml.model import (
-    LinearModel, DANGER_MODEL_PATH, WIN_MODEL_PATH,
+    LinearModel, DANGER_MODEL_PATH, WIN_MODEL_PATH, VALUE_MODEL_PATH,
 )
 
 TEST_FRACTION = 0.2
@@ -47,13 +50,27 @@ SPLIT_SEED = 0
 # one lineup in test and zero of it in train.
 
 
-def load_table(path: str):
-    """CSV.gz → (header, float32 matrix)."""
+def load_table(path: str, chunk: int = 200_000):
+    """CSV.gz → (header, float32 matrix), loaded in chunks.
+
+    A single list-of-lists parse of the 10k-game danger table would
+    peak at several GB of Python objects; chunking keeps the transient
+    footprint at ~chunk rows.
+    """
+    parts = []
     with gzip.open(path, "rt") as f:
         reader = csv.reader(f)
         header = next(reader)
-        rows = [[float(v) for v in row] for row in reader]
-    return header, np.asarray(rows, dtype=np.float32)
+        buf = []
+        for row in reader:
+            buf.append(row)
+            if len(buf) >= chunk:
+                parts.append(np.asarray(buf, dtype=np.float32))
+                buf = []
+        if buf:
+            parts.append(np.asarray(buf, dtype=np.float32))
+    data = np.vstack(parts) if parts else np.empty((0, len(header)), np.float32)
+    return header, data
 
 
 def split_by_game(data: np.ndarray, game_col: int = 0):
@@ -98,16 +115,19 @@ def _git_commit() -> str:
         return "unknown"
 
 
-def export(scaler, clf, feature_names, path, metadata):
+def export(scaler, clf, feature_names, path, metadata, link="logistic"):
     metadata = {**metadata, "code_commit": _git_commit(),
                 "n_features": len(feature_names)}
+    coefs = np.atleast_2d(clf.coef_)[0]           # (n,) for regressors
+    intercept = np.atleast_1d(clf.intercept_)[0]  # scalar for regressors
     model = LinearModel(
         features=list(feature_names),
         mean=[float(v) for v in scaler.mean_],
         scale=[float(v) for v in scaler.scale_],
-        coef=[float(v) for v in clf.coef_[0]],
-        intercept=float(clf.intercept_[0]),
+        coef=[float(v) for v in coefs],
+        intercept=float(intercept),
         metadata=metadata,
+        link=link,
     )
     model.save(path)
     return model
@@ -127,12 +147,13 @@ def report(name, y_true, y_prob, baseline_score=None):
     return auc, ap
 
 
-def coefficient_table(clf, feature_names):
-    order = np.argsort(-np.abs(clf.coef_[0]))
+def coefficient_table(clf, feature_names, unit=10):
+    coefs = np.atleast_2d(clf.coef_)[0]
+    order = np.argsort(-np.abs(coefs))
     print("\n  Coefficients (standardised — comparable magnitudes):")
     for i in order:
-        c = clf.coef_[0][i]
-        bar = "█" * min(30, int(abs(c) * 10))
+        c = coefs[i]
+        bar = "█" * min(30, int(abs(c) * unit))
         sign = "+" if c >= 0 else "−"
         print(f"    {feature_names[i]:<22} {sign}{abs(c):.3f}  {bar}")
 
@@ -224,12 +245,70 @@ def train_win(data_dir: str):
     print(f"\n  exported → {WIN_MODEL_PATH}")
 
 
+def train_value(data_dir: str):
+    """The Phase A model: expected NET POINTS from a post-discard state.
+
+    Same table and features as the win model, but regression on the
+    realized net_points — so a live full-flush track is worth more than
+    a chicken hand at the same shanten. Labels are per-HAND (every
+    decision in a seat's hand shares one outcome), so the effective
+    sample count is seats×games, not rows — the reason this trains on a
+    10k-game run.
+    """
+    print("\n" + "═" * 70)
+    print("VALUE MODEL — E[net points | post-discard state] — label: net_points")
+    print("═" * 70)
+    header, data = load_table(os.path.join(data_dir, "outcome.csv.gz"))
+    col = {name: i for i, name in enumerate(header)}
+    feat_idx = [col[f] for f in OUTCOME_FEATURES]
+
+    train, test = split_by_game(data)
+    n_games = len(np.unique(data[:, 0]))
+    print(f"  {len(data):,} rows from {n_games:,} games "
+          f"({len(train):,} train / {len(test):,} test)")
+    train_x, train_y = train[:, feat_idx], train[:, col["net_points"]]
+    test_x, test_y = test[:, feat_idx], test[:, col["net_points"]]
+    print(f"  label: mean {train_y.mean():+.2f}, std {train_y.std():.2f}, "
+          f"range [{train_y.min():.0f}, {train_y.max():.0f}]\n")
+
+    scaler = StandardScaler().fit(train_x)
+    reg = Ridge(alpha=1.0)
+    reg.fit(scaler.transform(train_x), train_y)
+    pred = reg.predict(scaler.transform(test_x))
+
+    def value_report(name, p):
+        print(f"  {name:<28} MAE {mean_absolute_error(test_y, p):.3f}   "
+              f"R² {r2_score(test_y, p):.4f}")
+
+    value_report("ridge regression", pred)
+    # Baselines: the mean (no model), and shanten alone (what the win
+    # model effectively saw before the tai features existed)
+    value_report("predict the mean", np.full_like(test_y, train_y.mean()))
+    sh = train[:, [col["shanten"]]]
+    sh_reg = Ridge(alpha=1.0).fit(sh, train_y)
+    value_report("shanten only", sh_reg.predict(test[:, [col["shanten"]]]))
+    gbm = HistGradientBoostingRegressor(max_iter=300, random_state=0)
+    gbm.fit(train_x, train_y)
+    value_report("hist gradient boosting", gbm.predict(test_x))
+
+    coefficient_table(reg, OUTCOME_FEATURES, unit=3)
+    model = export(scaler, reg, OUTCOME_FEATURES, VALUE_MODEL_PATH, {
+        "label": "net_points", "games": int(n_games), "rows": int(len(data)),
+        "test_mae": round(float(mean_absolute_error(test_y, pred)), 3),
+        "test_r2": round(float(r2_score(test_y, pred)), 4),
+        "trained": date.today().isoformat(),
+    }, link="identity")
+    print(f"\n  exported → {VALUE_MODEL_PATH}")
+    return model
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--data", default="data")
     args = parser.parse_args()
     train_danger(args.data)
     train_win(args.data)
+    train_value(args.data)
 
 
 if __name__ == "__main__":

@@ -16,7 +16,11 @@ and the raw tile/state features let it correct them where they're wrong.
 
 from typing import Dict, List
 
-from mahjong.tiles import is_honor, is_numbered, rank_of
+from mahjong.tiles import (
+    is_honor, is_numbered, rank_of, suit_of, Suit,
+    NUM_STANDARD_UNIQUE, WAN_START, TONG_START, SUO_START,
+    WIND_START, DRAGON_START, FLOWER_START, ANIMAL_START,
+)
 from mahjong.defense import estimate_danger_detailed
 
 
@@ -111,33 +115,143 @@ def _adjacent_visible(tile_id: int, rank: int, visible: List[int],
     return total / 8.0
 
 
-# ── Outcome model: one vector per decision state ─────────────────────
+# ── Outcome/value model: one vector per POST-DISCARD state ───────────
+#
+# These describe the 13-tile hand a discard leaves behind: how close it
+# is (shanten, acceptance), the table context, and — the Phase A
+# addition — what the hand is WORTH if it gets there. The tai-potential
+# features encode this table's confirmed rules: ping hu 4 collapses to
+# chou ping hu 1 the moment a bonus tile arrives, the concealed bonus
+# dies with the first claimed meld, flush and honor-triplet tracks
+# multiply value. A value model without them literally cannot tell a
+# full flush from a chicken hand.
 
 OUTCOME_FEATURES = [
-    "shanten",              # best reachable shanten this turn / 6
-    "best_acceptance",      # tile acceptance of the best discard / 30
+    "shanten",              # shanten after the discard / 6
+    "acceptance",           # tile acceptance after the discard / 30
     "turn_frac",
     "wall_frac",
     "own_melds",            # own exposed melds / 4
-    "own_bonus",            # own flowers + animals collected / 8
     "max_opp_threat",
     "opp_total_melds",
+    "is_concealed",         # no claimed melds → 门清平胡 +1 still live
+    "has_bonus_tiles",      # any flower/animal → ping hu already degraded
+    "bonus_tai",            # tai banked in bonus tiles alone / 8
+    "suit_concentration",   # (biggest suit + honors) / all tiles → flush track
+    "honor_frac",           # honors / all tiles → half vs full flush
+    "dragon_progress",      # dragon pair/triplet trajectory / 3
+    "wind_progress",        # seat + prevailing wind triplet trajectory / 2
+    "triplet_progress",     # pong-track shape (碰碰胡) / 4
+    "run_progress",         # chow-track shape (平胡) / 4
 ]
 
+# Progress of one tile type toward a scoring triplet: a pair is worth
+# half a triplet in trajectory terms, a lone tile only a seed.
+_TRIPLET_PROG = {0: 0.0, 1: 0.15, 2: 0.5, 3: 1.0, 4: 1.0}
 
-def outcome_features(player_idx: int, game, best_shanten: int,
-                     best_acceptance: int, threat_data: Dict) -> List[float]:
-    """Feature vector for "how is this hand going" — trains P(win)."""
+
+def _bonus_tai(flowers: List[int], seat_index: int) -> int:
+    """Tai banked in bonus tiles under this table's rules: seat flowers
+    and animals 1 each, all four animals +1, each complete series +1."""
+    fset = set(flowers)
+    tai = 0
+    for f in fset:
+        if f >= ANIMAL_START:
+            tai += 1
+        elif (f - FLOWER_START) % 4 == seat_index:
+            tai += 1
+    if fset >= set(range(ANIMAL_START, ANIMAL_START + 4)):
+        tai += 1
+    for start in (FLOWER_START, FLOWER_START + 4):
+        if fset >= set(range(start, start + 4)):
+            tai += 1
+    return tai
+
+
+def _greedy_runs(counts: List[int]) -> int:
+    """Complete concealed runs, extracted greedily after triplets.
+
+    An approximation, not a decomposition — fine for a trajectory
+    feature, wrong for scoring (scoring uses decompose_winning_hand).
+    """
+    c = counts[:]
+    runs = 0
+    for start in (WAN_START, TONG_START, SUO_START):
+        for r in range(start, start + 7):
+            while c[r] > 0 and c[r + 1] > 0 and c[r + 2] > 0:
+                c[r] -= 1
+                c[r + 1] -= 1
+                c[r + 2] -= 1
+                runs += 1
+    return runs
+
+
+def outcome_features(player_idx: int, game, counts_after: List[int],
+                     shanten: int, acceptance: int,
+                     threat_data: Dict) -> List[float]:
+    """Feature vector for the state a discard leaves behind.
+
+    counts_after: concealed tile counts AFTER the discard (13-tile
+    shape). shanten/acceptance likewise describe the post-discard hand
+    — evaluate_discards hands both back per candidate.
+    """
     hand = game.hands[player_idx]
     opp_melds = sum(game.hands[p].num_exposed_melds
                     for p in range(4) if p != player_idx)
+    seat_index = game.seat_index(player_idx)
+
+    # Exposed meld tiles still belong to the hand for value purposes
+    exposed_counts = [0] * NUM_STANDARD_UNIQUE
+    exposed_pongs = exposed_chows = 0
+    for kind, tiles in hand.exposed:
+        if kind == "chow":
+            exposed_chows += 1
+        else:
+            exposed_pongs += 1  # pongs and kongs both fill the pong track
+        for t in tiles:
+            exposed_counts[t] += 1
+
+    full = [min(4, counts_after[i] + exposed_counts[i])
+            for i in range(NUM_STANDARD_UNIQUE)]
+    total_tiles = sum(full)
+
+    suit_totals = {Suit.WAN: 0, Suit.TONG: 0, Suit.SUO: 0}
+    honors = 0
+    for t in range(NUM_STANDARD_UNIQUE):
+        if full[t] == 0:
+            continue
+        if is_honor(t):
+            honors += full[t]
+        else:
+            suit_totals[suit_of(t)] += full[t]
+    biggest_suit = max(suit_totals.values()) if total_tiles else 0
+
+    dragon_prog = sum(_TRIPLET_PROG[full[d]]
+                      for d in range(DRAGON_START, DRAGON_START + 3))
+    seat_wind = WIND_START + seat_index
+    wind_prog = (_TRIPLET_PROG[full[seat_wind]]
+                 + _TRIPLET_PROG[full[game.prevailing_wind]])
+
+    concealed_triplets = sum(1 for t in range(NUM_STANDARD_UNIQUE)
+                             if counts_after[t] >= 3)
+    triplet_prog = exposed_pongs + concealed_triplets
+    run_prog = exposed_chows + _greedy_runs(counts_after)
+
     return [
-        best_shanten / 6.0,
-        min(1.0, best_acceptance / 30.0),
+        shanten / 6.0,
+        min(1.0, acceptance / 30.0),
         min(1.0, game.turn / 60.0),
         min(1.0, game.tiles_remaining / 92.0),
         hand.num_exposed_melds / 4.0,
-        min(1.0, len(hand.flowers) / 8.0),
         threat_data["max_threat"],
         opp_melds / 12.0,
+        1.0 if hand.num_exposed_melds == 0 else 0.0,
+        1.0 if hand.flowers else 0.0,
+        min(1.0, _bonus_tai(hand.flowers, seat_index) / 8.0),
+        (biggest_suit + honors) / total_tiles if total_tiles else 0.0,
+        honors / total_tiles if total_tiles else 0.0,
+        min(1.0, dragon_prog / 3.0),
+        min(1.0, wind_prog / 2.0),
+        min(1.0, triplet_prog / 4.0),
+        min(1.0, run_prog / 4.0),
     ]

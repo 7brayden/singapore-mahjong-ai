@@ -127,6 +127,7 @@ def generate_game(game_id: int, seed: int, lineup_fn,
                 is_last = game.tiles_remaining <= DEAD_WALL_SIZE
                 evals = evaluate_discards(hand, visible_counts=visible)
 
+                chosen_eval = None
                 for e in evals:
                     tile = e["tile_id"]
                     waited = any(tile in w for w in waits.values())
@@ -135,16 +136,23 @@ def generate_game(game_id: int, seed: int, lineup_fn,
                     chosen = 1 if tile == answer else 0
                     if chosen:
                         last_chosen = (len(danger_rows), seat, tile)
+                        chosen_eval = e
                     danger_rows.append(
                         [game_id, decision_id, lineup_idx, seat, tile]
                         + danger_features(tile, seat, game, visible, threat)
                         + [int(waited), int(legal), chosen, 0])
 
-                outcome_rows.append(
-                    [game_id, decision_id, lineup_idx, seat]
-                    + outcome_features(seat, game, evals[0]["shanten"],
-                                       evals[0]["acceptance"], threat)
-                    + [0, 0])
+                # Outcome row: the state the CHOSEN discard leaves behind
+                # — its realized net points become the value label.
+                if chosen_eval is not None:
+                    counts_after = hand.copy_counts()
+                    counts_after[answer] -= 1
+                    outcome_rows.append(
+                        [game_id, decision_id, lineup_idx, seat]
+                        + outcome_features(seat, game, counts_after,
+                                           chosen_eval["shanten"],
+                                           chosen_eval["acceptance"], threat)
+                        + [0, 0])
                 decision_id += 1
             request = gen.send(answer)
     except StopIteration as stop:

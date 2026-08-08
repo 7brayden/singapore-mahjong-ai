@@ -10,7 +10,7 @@ from mahjong.ml.features import (
 )
 from mahjong.ml.datagen import DANGER_COLUMNS, OUTCOME_COLUMNS, generate_game
 from mahjong.ml.model import (
-    LinearModel, load_danger_model, load_win_model,
+    LinearModel, load_danger_model, load_value_model, load_win_model,
 )
 
 
@@ -33,12 +33,47 @@ def test_danger_features_shape_and_range():
         assert all(0.0 <= v <= 1.0 for v in x), (tile, x)
 
 
+def _post_discard(game, seat=0):
+    """Counts after discarding the seat's first tile — a 13-tile shape."""
+    counts = game.hands[seat].copy_counts()
+    counts[game.hands[seat].tiles[0]] -= 1
+    return counts
+
+
 def test_outcome_features_shape():
     game = _midgame()
     threat = estimate_opponent_threats(0, game)
-    x = outcome_features(0, game, 2, 12, threat)
+    x = outcome_features(0, game, _post_discard(game), 2, 12, threat)
     assert len(x) == len(OUTCOME_FEATURES)
     assert all(0.0 <= v <= 1.0 for v in x)
+
+
+def test_tai_potential_features_see_hand_value():
+    # Two hands at the same shanten: a full-flush track vs mixed junk.
+    # The value features must separate them — that's their entire job.
+    # Fresh game: seat 0 must have no exposed melds/flowers, since the
+    # extractor correctly folds those into the synthetic counts.
+    game = GameState([GreedyAgent(f"G{i}") for i in range(4)], seed=2)
+    game.setup()
+    game.hands[0].flowers.clear()
+    threat = estimate_opponent_threats(0, game)
+
+    def features_for(tiles):
+        counts = [0] * 34
+        for t in tiles:
+            counts[t] += 1
+        return outcome_features(0, game, counts, 2, 10, threat)
+
+    flushy = features_for([0, 1, 2, 3, 4, 5, 6, 7, 7, 8, 8, 0, 1])  # all wan
+    # Spread across all three suits with few honors — genuinely junk.
+    # (A honor-heavy hand would legitimately score higher: half-flush track.)
+    junk = features_for([0, 3, 6, 9, 12, 15, 18, 21, 24, 27, 29, 31, 33])
+
+    names = {n: i for i, n in enumerate(OUTCOME_FEATURES)}
+    assert flushy[names["suit_concentration"]] == 1.0
+    assert junk[names["suit_concentration"]] < 0.6
+    assert flushy[names["run_progress"]] > junk[names["run_progress"]]
+    assert junk[names["honor_frac"]] > flushy[names["honor_frac"]]
 
 
 # ── Data generation ──────────────────────────────────────────────────
@@ -121,9 +156,24 @@ def test_linear_model_predict_and_roundtrip(tmp_path):
 
 # ── Agent ────────────────────────────────────────────────────────────
 
+def _toy_value_model():
+    """Identity-link value model: rewards low shanten, run shape, and
+    suit concentration — a crude but directionally sane V(state)."""
+    n = len(OUTCOME_FEATURES)
+    coef = [0.0] * n
+    coef[OUTCOME_FEATURES.index("shanten")] = -5.0
+    coef[OUTCOME_FEATURES.index("run_progress")] = 1.0
+    coef[OUTCOME_FEATURES.index("suit_concentration")] = 1.0
+    return LinearModel(features=list(OUTCOME_FEATURES),
+                       mean=[0.0] * n, scale=[1.0] * n,
+                       coef=coef, intercept=0.5, link="identity")
+
+
 def test_learned_agent_plays_deterministically():
     def play(seed):
-        agents = [LearnedAgent(f"L{i}", model=_toy_model()) for i in range(2)]
+        agents = [LearnedAgent(f"L{i}", model=_toy_model(),
+                               value_model=_toy_value_model())
+                  for i in range(2)]
         agents += [HybridAgent(f"H{i}") for i in range(2)]
         return GameState(agents, seed=seed).play()
 
@@ -163,7 +213,25 @@ def test_packaged_win_model_is_sane():
 
     game = _midgame()
     threat = estimate_opponent_threats(0, game)
+    counts = _post_discard(game)
     # A tenpai hand must be rated likelier to win than a far-off one
-    near = model.predict(outcome_features(0, game, 0, 20, threat))
-    far = model.predict(outcome_features(0, game, 5, 4, threat))
+    near = model.predict(outcome_features(0, game, counts, 0, 20, threat))
+    far = model.predict(outcome_features(0, game, counts, 5, 4, threat))
     assert 0.0 < far < near < 1.0
+
+
+def test_packaged_value_model_is_sane():
+    model = load_value_model()
+    assert model is not None, "value_model.json missing from the package"
+    assert model.features == list(OUTCOME_FEATURES)
+    assert model.link == "identity"
+
+    game = _midgame()
+    threat = estimate_opponent_threats(0, game)
+    counts = _post_discard(game)
+    near = model.predict(outcome_features(0, game, counts, 0, 20, threat))
+    far = model.predict(outcome_features(0, game, counts, 5, 4, threat))
+    # Values are points: tenpai must be worth more than hopeless, and
+    # both must sit inside plausible point stakes for this table.
+    assert near > far
+    assert -10.0 < far < near < 40.0
