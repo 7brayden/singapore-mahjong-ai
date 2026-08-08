@@ -188,14 +188,25 @@ def _greedy_runs(counts: List[int]) -> int:
 
 def outcome_features(player_idx: int, game, counts_after: List[int],
                      shanten: int, acceptance: int,
-                     threat_data: Dict) -> List[float]:
+                     threat_data: Dict, *,
+                     exposed=None, flowers=None) -> List[float]:
     """Feature vector for the state a discard leaves behind.
 
     counts_after: concealed tile counts AFTER the discard (13-tile
     shape). shanten/acceptance likewise describe the post-discard hand
     — evaluate_discards hands both back per candidate.
+
+    exposed/flowers default to the live hand's; passing them explicitly
+    values a HYPOTHETICAL state — the branch evaluation behind learned
+    claim decisions ("what is my hand worth if I pong this and discard
+    my best tile, versus if I let it pass?").
     """
     hand = game.hands[player_idx]
+    if exposed is None:
+        exposed = hand.exposed
+    if flowers is None:
+        flowers = hand.flowers
+    num_melds = len(exposed)
     opp_melds = sum(game.hands[p].num_exposed_melds
                     for p in range(4) if p != player_idx)
     seat_index = game.seat_index(player_idx)
@@ -203,7 +214,7 @@ def outcome_features(player_idx: int, game, counts_after: List[int],
     # Exposed meld tiles still belong to the hand for value purposes
     exposed_counts = [0] * NUM_STANDARD_UNIQUE
     exposed_pongs = exposed_chows = 0
-    for kind, tiles in hand.exposed:
+    for kind, tiles in exposed:
         if kind == "chow":
             exposed_chows += 1
         else:
@@ -242,12 +253,12 @@ def outcome_features(player_idx: int, game, counts_after: List[int],
         min(1.0, acceptance / 30.0),
         min(1.0, game.turn / 60.0),
         min(1.0, game.tiles_remaining / 92.0),
-        hand.num_exposed_melds / 4.0,
+        num_melds / 4.0,
         threat_data["max_threat"],
         opp_melds / 12.0,
-        1.0 if hand.num_exposed_melds == 0 else 0.0,
-        1.0 if hand.flowers else 0.0,
-        min(1.0, _bonus_tai(hand.flowers, seat_index) / 8.0),
+        1.0 if num_melds == 0 else 0.0,
+        1.0 if flowers else 0.0,
+        min(1.0, _bonus_tai(flowers, seat_index) / 8.0),
         (biggest_suit + honors) / total_tiles if total_tiles else 0.0,
         honors / total_tiles if total_tiles else 0.0,
         min(1.0, dragon_prog / 3.0),

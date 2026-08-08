@@ -70,8 +70,11 @@ export default function App() {
     setBusy(true);
     setSetupError(null);
     try {
+      // The human seat's agent never plays — it answers /hint requests,
+      // so it should be the strongest advisor available: the learned
+      // agent (value-aware discards AND claims).
       const bots = cfg.personas.map((p, seat) =>
-        seat === cfg.humanSeat ? "hybrid" : PERSONA_TO_BOT[p] ?? "hybrid");
+        seat === cfg.humanSeat ? "learned" : PERSONA_TO_BOT[p] ?? "hybrid");
       const baseSeed = parseSeed(cfg.seedText);
       const created = await createGame({
         seed: baseSeed === null ? null : baseSeed + (hand - 1),

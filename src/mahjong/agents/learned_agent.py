@@ -1,6 +1,29 @@
-"""Learned agent — discards chosen by expected value over trained models.
+"""Learned agent — discards AND claims chosen by expected value.
 
-Claiming and kong logic come from HybridAgent (Phase B learns those).
+Phase B made the claim decisions model-based. There is deliberately no
+supervised "claim model": the heuristic agents that generated our data
+only claim at shanten <= 2, so observed claims are hopelessly
+confounded — a model fitted on them learns "claiming means you were
+already close", not whether claiming helps. Instead every claim window
+is a BRANCH COMPARISON under the same value model:
+
+    claim branch:  form the meld, then best-EV discard from the
+                   shortened hand (its forced discard carries the usual
+                   deal-in risk term)
+    pass branch:   V of the hand exactly as it stands
+
+Claim iff the claim branch is worth more points. Everything the value
+model learned now prices the claim: shanten gained, shape entered, and
+— this table's tax — the concealed bonus a first meld destroys and the
+ping hu that a claimed pong forfeits. Passing has no discard-risk term
+(you throw nothing), so claims get rarer as the table gets hotter,
+with no explicit rule saying so.
+
+Own-turn kong declarations stay on the hybrid's shanten rule: they are
+0.3% of decisions, and their upside (a free replacement draw, a
+possible robbed kong against us) is invisible to V — a V comparison
+would be systematically biased against them.
+
 The discard decision scores each candidate in POINTS:
 
     EV(tile) = (1 − P(deal-in on tile)) × V(hand after discard)
@@ -30,8 +53,9 @@ squash path survives as `danger_for` for comparison runs.
 from typing import List, Optional
 
 from mahjong.agents.hybrid_agent import HybridAgent
-from mahjong.hand import evaluate_discards
+from mahjong.hand import calculate_shanten, evaluate_discards, tile_acceptance
 from mahjong.opponent_model import estimate_opponent_threats
+from mahjong.tiles import NUM_STANDARD_UNIQUE
 from mahjong.ml.features import danger_features, outcome_features
 from mahjong.ml.model import (
     LinearModel, load_danger_model, load_value_model,
@@ -86,6 +110,100 @@ class LearnedAgent(HybridAgent):
         p = self.deal_in_probability(tile_id, player_idx, game_state,
                                      threat_data, visible)
         return p / (p + self.SQUASH_K)
+
+    # ── Phase B: claims as branch evaluation ─────────────────────────
+
+    def _shape_value(self, player_idx: int, game_state, counts: List[int],
+                     exposed, threat_data, visible) -> float:
+        """V of a 13-shape state (counts + possibly hypothetical melds)."""
+        melds = len(exposed)
+        shanten = calculate_shanten(counts, melds)
+        _, acceptance = tile_acceptance(counts, melds, visible)
+        x = outcome_features(player_idx, game_state, counts, shanten,
+                             acceptance, threat_data, exposed=exposed)
+        return self.value_model.predict(x)
+
+    def _best_discard_ev(self, player_idx: int, game_state,
+                         counts: List[int], exposed, threat_data,
+                         visible) -> float:
+        """Best EV over all discards from a 14-shape hand — the value of
+        a claim branch, forced follow-up discard risk included."""
+        melds = len(exposed)
+        best = None
+        for t in range(NUM_STANDARD_UNIQUE):
+            if counts[t] == 0:
+                continue
+            counts[t] -= 1
+            shanten = calculate_shanten(counts, melds)
+            _, acceptance = tile_acceptance(counts, melds, visible)
+            x = outcome_features(player_idx, game_state, counts, shanten,
+                                 acceptance, threat_data, exposed=exposed)
+            value = self.value_model.predict(x)
+            counts[t] += 1
+            p_di = self.deal_in_probability(t, player_idx, game_state,
+                                            threat_data, visible)
+            ev = (1.0 - p_di) * value - p_di * self.DEAL_IN_COST
+            if best is None or ev > best:
+                best = ev
+        return best if best is not None else -self.DEAL_IN_COST
+
+    def should_claim(self, player_idx: int, tile_id: int,
+                     claim_type: str, game_state) -> bool:
+        """Pong (or kong) a discard iff the melded branch out-values
+        standing pat."""
+        hand = game_state.hands[player_idx]
+        counts = hand.copy_counts()
+        needed = 2 if claim_type == "pong" else 3
+        if counts[tile_id] < needed:
+            return False
+        visible = game_state.get_visible_counts(player_idx)
+        threat_data = estimate_opponent_threats(player_idx, game_state)
+
+        pass_value = self._shape_value(player_idx, game_state, counts,
+                                       hand.exposed, threat_data, visible)
+
+        counts[tile_id] -= needed
+        meld_kind = "pong" if claim_type == "pong" else "kong"
+        exposed = list(hand.exposed) + [(meld_kind,
+                                         [tile_id] * (needed + 1))]
+        if claim_type == "pong":
+            # 14-shape: meld formed, must discard
+            claim_value = self._best_discard_ev(
+                player_idx, game_state, counts, exposed, threat_data, visible)
+        else:
+            # Exposed kong: 13-shape before the replacement draw. The
+            # draw's upside and the forced discard's risk are both
+            # unmodelled and roughly offset.
+            claim_value = self._shape_value(
+                player_idx, game_state, counts, exposed, threat_data, visible)
+        return claim_value > pass_value
+
+    def choose_chow(self, player_idx: int, tile_id: int,
+                    options, game_state):
+        """Chow with the best partner pair iff it out-values passing."""
+        hand = game_state.hands[player_idx]
+        visible = game_state.get_visible_counts(player_idx)
+        threat_data = estimate_opponent_threats(player_idx, game_state)
+        counts = hand.copy_counts()
+
+        pass_value = self._shape_value(player_idx, game_state, counts,
+                                       hand.exposed, threat_data, visible)
+
+        best_pair = None
+        best_value = pass_value
+        for p1, p2 in options:
+            counts[p1] -= 1
+            counts[p2] -= 1
+            exposed = list(hand.exposed) + [
+                ("chow", sorted([tile_id, p1, p2]))]
+            branch = self._best_discard_ev(
+                player_idx, game_state, counts, exposed, threat_data, visible)
+            counts[p1] += 1
+            counts[p2] += 1
+            if branch > best_value:
+                best_value = branch
+                best_pair = (p1, p2)
+        return best_pair
 
     def choose_discard(self, player_idx: int, game_state) -> int:
         hand = game_state.hands[player_idx]

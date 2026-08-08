@@ -235,3 +235,74 @@ def test_packaged_value_model_is_sane():
     # both must sit inside plausible point stakes for this table.
     assert near > far
     assert -10.0 < far < near < 40.0
+
+
+# ── Phase B: claims as branch evaluation ─────────────────────────────
+
+def _value_model_pricing_concealment():
+    """Toy value model where concealment and chow shape carry real
+    points and shanten matters — enough to make claim trade-offs
+    concrete and deterministic for tests."""
+    n = len(OUTCOME_FEATURES)
+    coef = [0.0] * n
+    # Features are normalised (shanten/6), so a coefficient of −18 makes
+    # one shanten step worth 3 points against concealment's 2.
+    coef[OUTCOME_FEATURES.index("shanten")] = -18.0
+    coef[OUTCOME_FEATURES.index("is_concealed")] = 2.0
+    coef[OUTCOME_FEATURES.index("run_progress")] = 1.0
+    return LinearModel(features=list(OUTCOME_FEATURES),
+                       mean=[0.0] * n, scale=[1.0] * n,
+                       coef=coef, intercept=1.0, link="identity")
+
+
+def _quiet_danger_model():
+    n = len(DANGER_FEATURES)
+    return LinearModel(features=list(DANGER_FEATURES),
+                       mean=[0.0] * n, scale=[1.0] * n,
+                       coef=[0.0] * n, intercept=-4.0)  # ~1.8% flat
+
+
+def _claim_fixture():
+    game = GameState([GreedyAgent(f"G{i}") for i in range(4)], seed=3)
+    agent = LearnedAgent("L", model=_quiet_danger_model(),
+                         value_model=_value_model_pricing_concealment())
+    return game, agent
+
+
+def test_declines_chow_that_only_breaks_concealment():
+    # Already tenpai and fully concealed (45w + three runs + 9s pair,
+    # waiting 3w/6w). Chowing the 3w leaves the hand exactly as close
+    # (tenpai on the 9s pair instead) but destroys is_concealed —
+    # under a value model that prices concealment, decline.
+    game, agent = _claim_fixture()
+    hand = game.hands[1]
+    for t in [3, 4, 9, 10, 11, 18, 19, 20, 21, 22, 23, 26, 26]:
+        hand.add_tile(t)
+    choice = agent.choose_chow(1, 2, [(3, 4)], game)
+    assert choice is None
+
+
+def test_takes_chow_that_completes_real_progress():
+    # Five blocks, 1-shanten (two partials, one spare junk tile). The
+    # chow converts 45w into a meld WITHOUT spending a draw: discard
+    # the lone White Dragon and the hand is tenpai. Shanten 1 → 0 at
+    # -6/shanten dwarfs the 2-point concealment loss: must claim.
+    game, agent = _claim_fixture()
+    hand = game.hands[1]
+    for t in [3, 4, 9, 10, 11, 18, 19, 20, 26, 26, 24, 25, 33]:
+        hand.add_tile(t)
+    choice = agent.choose_chow(1, 2, [(3, 4)], game)
+    assert choice == (3, 4)
+
+
+def test_claim_decisions_are_deterministic():
+    def play(seed):
+        agents = [LearnedAgent(f"L{i}", model=_quiet_danger_model(),
+                               value_model=_value_model_pricing_concealment())
+                  for i in range(4)]
+        game = GameState(agents, seed=seed)
+        result = game.play()
+        melds = sum(game.hands[p].num_exposed_melds for p in range(4))
+        return (result.winner, result.win_type, result.turns, melds)
+
+    assert play(21) == play(21)

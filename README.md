@@ -218,14 +218,44 @@ points diff   learned +0.500/seed  95% CI [−1.836, +2.836]      (not significa
 ```
 
 The first statistically established differences in the project: the
-value-aware agent deals in **31% less** (p<0.0001) and wins genuinely fewer
-hands (p=0.002) — a real style, not noise. It leads on net points for the
-first time, but the lead is inside the noise band; resolving ±0.5 pts/seed
-would take ~20,000 seeds. Honest summary: value awareness bought a
-statistically real defensive identity and moved the points needle from
-−0.13/seat to +0.06/seat, but "better than the heuristic" remains unproven.
-The claim decisions — still 100% hand-coded rules, ~18% of all decisions —
-are the next learnable surface (Phase B).
+value-aware agent deals in far less (p<0.0001) and wins genuinely fewer
+hands (p=0.0002) — a real style, not noise.
+
+### Phase B: the claims learned too
+
+Pong/chow decisions are no longer `if shanten <= 2` rules. There is
+deliberately no supervised "claim model" — the heuristic agents that
+generated the data only claim when already close to winning, so observed
+claims are hopelessly confounded. Instead every claim window is a branch
+comparison under the same value model: *V(meld formed, then best-EV discard —
+its forced discard carrying the usual deal-in risk)* versus *V(hand as it
+stands)*. Claim iff the melded branch is worth more points. The concealment
+bonus, the ping hu forfeit, the shape change — all priced by coefficients
+fitted to outcomes, none of it hand-coded.
+
+The result contradicted the obvious prediction: value-priced claims got MORE
+frequent, not less (4.4 vs 3.5 melds/game in mirror play). A claim converts a
+partial into a meld without spending a draw, and the model prices that
+tempo at roughly the concealment tax — so after the first meld, claims are
+nearly free. The style paid:
+
+| 1,000 games, duplicate seating | Win% | DI/disc% | Pts/seat |
+|---|---|---|---|
+| Hybrid | 25.3 [23.4, 27.3] | 1.81 [1.64, 2.00] | −0.181 |
+| **Learned (value discards + claims)** | 20.3 [18.6, 22.1] | **1.24 [1.10, 1.40]** | **+0.181** |
+
+```
+deal-in rate  p<0.0001 (significant)      win rate  p=0.0002 (significant)
+points diff   learned +1.448/seed  95% CI [−0.951, +3.847]  (not yet significant)
+```
+
+Phase A's +0.50/seed points lead tripled to +1.45/seed. Still shy of
+significance — ~3,000 seeds would resolve it if the effect holds — but the
+shape of the player is now set: claims freely for tempo and value, wins
+fewer and fatter hands, and remains the safest discarder at the table even
+while exposing the most melds. Both halves of every decision it makes are
+now model-priced; the remaining hand-written pieces are the own-turn kong
+rule and the EV formula itself.
 
 ## Scoring (tai)
 
