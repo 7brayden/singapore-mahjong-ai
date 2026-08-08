@@ -109,6 +109,25 @@ def paired_ci(diffs, z: float = 1.96):
     return (mean, mean - z * se, mean + z * se, se)
 
 
+def two_proportion_test(k1, n1, k2, n2):
+    """Pooled two-proportion z-test. Returns (diff, z, p_two_tailed).
+
+    Overlapping confidence intervals are NOT the same as a
+    non-significant difference, so the comparison is tested directly
+    rather than eyeballed off the two intervals.
+    """
+    if n1 == 0 or n2 == 0:
+        return (0.0, 0.0, 1.0)
+    p1, p2 = k1 / n1, k2 / n2
+    pooled = (k1 + k2) / (n1 + n2)
+    se = math.sqrt(pooled * (1 - pooled) * (1 / n1 + 1 / n2))
+    if se == 0:
+        return (p1 - p2, 0.0, 1.0)
+    z = (p1 - p2) / se
+    p = math.erfc(abs(z) / math.sqrt(2))
+    return (p1 - p2, z, p)
+
+
 def _variance(xs):
     n = len(xs)
     if n < 2:
@@ -187,7 +206,8 @@ def report(roles, totals, per_seed, per_game, rotations, n_games, label):
     print(f"\n  {label}")
     print(f"  lineup {list(roles)} · {len(rotations)} rotations/seed "
           f"· {n_games:,} games")
-    print(f"  {'Agent':<11} {'Win%':>16} {'DI/disc%':>18} {'Pts/seat':>10}")
+    print(f"  {'Agent':<11} {'Win%':>16} {'DI/disc%':>18} {'Pts/seat':>10}"
+          f"   {'raw (wins/seats, DI/discards)'}")
     for role in sides:
         t = totals[role]
         wp, wlo, whi = wilson(t["won"], t["seats"])
@@ -195,11 +215,20 @@ def report(roles, totals, per_seed, per_game, rotations, n_games, label):
         pts = t["points"] / t["seats"]
         print(f"  {role:<11} {100*wp:5.1f} [{100*wlo:4.1f},{100*whi:4.1f}]"
               f" {100*dp:6.2f} [{100*dlo:5.2f},{100*dhi:5.2f}]"
-              f" {pts:>+10.3f}")
+              f" {pts:>+10.3f}"
+              f"   {t['won']:,}/{t['seats']:,}, {t['deal_ins']:,}/{t['discards']:,}")
 
     if len(sides) != 2:
         return None
     a, b = sides
+
+    for metric, num, den in (("win rate", "won", "seats"),
+                             ("deal-in rate", "deal_ins", "discards")):
+        diff, z, p = two_proportion_test(
+            totals[a][num], totals[a][den], totals[b][num], totals[b][den])
+        mark = "significant" if p < 0.05 else "not significant"
+        print(f"    {metric:<13} {a} − {b} = {100*diff:+.3f} pp   "
+              f"z={z:+.2f}  p={p:.4f}  ({mark})")
     diffs = [per_seed[s][a] - per_seed[s][b] for s in per_seed]
     mean, lo, hi, se = paired_ci(diffs)
     verdict = ("no significant difference" if lo <= 0 <= hi

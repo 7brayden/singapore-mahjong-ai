@@ -129,22 +129,35 @@ PYTHONPATH=src python3 -m mahjong.ml.train --data data/
 PYTHONPATH=src python3 experiments/compare_learned.py   # benchmark vs Hybrid
 ```
 
-### What the data said (3,000 games, 1.4M candidate discards, held-out test)
+### What the data said (3,000 games, 1.4M candidate discards, held-out 20% of games)
 
 | Ranking hot tiles | ROC AUC | PR AUC |
 |---|---|---|
-| Hand-tuned heuristic (defense.py) | 0.570 | 0.041 |
-| Logistic regression | **0.867** | **0.133** |
-| Gradient boosting (ceiling check) | 0.871 | 0.128 |
+| Hand-tuned heuristic (defense.py) | 0.561 | 0.040 |
+| Logistic regression | **0.868** | **0.136** |
+| Gradient boosting (ceiling check) | 0.872 | 0.140 |
 
-The heuristic blend was barely better than a coin flip at spotting genuinely
-dangerous tiles. The learned model's strongest signals are ones the heuristic
-underweights: *this exact tile is already in an opponent's river* (−0.58),
-*melds are exposed* (+0.56), *it's late* (+0.54), *the neighbouring ranks are
-dead* (−0.50). The four heuristic signals it was supposed to re-weight all
-landed near zero — including opponent_threat, the old blend's 0.35-weight star.
-A win-probability model (AUC 0.750 vs 0.674 for shanten alone) is trained by
-the same script for the upcoming EV work.
+The model's strongest signals are ones the heuristic underweights: *it's late*
+(+0.71), *the neighbouring ranks are dead* (−0.59), *this exact tile is already
+in an opponent's river* (−0.57), *melds are exposed* (+0.50). The four heuristic
+signals it was built to re-weight all landed near zero — including
+opponent_threat, the old blend's 0.35-weight star. A win-probability model
+(AUC 0.719 vs 0.648 for shanten alone) is trained by the same script and feeds
+the EV agent.
+
+Two caveats worth stating plainly, both found by auditing this pipeline:
+
+- **Global AUC flatters the model.** It pools rows across every decision, which
+  punishes a scorer that ranks correctly *within a hand* but whose absolute
+  scale drifts between situations — and within-hand ranking is the only job the
+  heuristic ever had. Measured fairly, on decisions containing both a hot and a
+  cold tile, it is **0.72 for the model vs 0.61 for the heuristic**. A clear
+  win, but not the coin-flip gap the pooled number suggests.
+- **The train/test split was once broken.** `datagen` assigns lineups by
+  `game_id % 5` and the split held out `game_id % 5 == 4`, so the test set was
+  exactly one lineup that training never saw. Now a seeded random split of
+  games, with lineup balance asserted on every run. (The headline AUC survived
+  the fix — 0.867 → 0.870 — but that was luck, not design.)
 
 ### The integration lesson (honest numbers)
 
@@ -168,7 +181,7 @@ around.
 The current LearnedAgent scores every candidate discard in actual points:
 
 ```
-EV(tile) = P(win | hand after discard) × 7.65  −  P(deal-in on tile) × 5.94
+EV(tile) = P(win | hand after discard) × 8.63  −  P(deal-in on tile) × 8.55
 ```
 
 — both probabilities from the trained models, both stakes measured empirically
@@ -177,19 +190,34 @@ emerges naturally: with a hopeless hand every candidate's P(win) is flat and
 tiny, so the risk term decides and the agent discards its safest tile without
 an explicit "defense mode".
 
-| 300 games each, seats alternate | Win% | DI/disc% | Net pts/game |
-|---|---|---|---|
-| Mirror: 4× Learned | 21.6/seat | 1.35 | — |
-| vs Hybrid — Hybrid / **Learned** | 25.3 / 20.7 | 1.50 / **1.22** | +0.10 / −0.10 |
-| vs Greedy — Greedy / **Learned** | 28.5 / 19.8 | 1.87 / **1.62** | +0.15 / −0.15 |
+Those two stakes are nearly equal under this table's rules, and that is
+informative: with instant chip payouts off, a ron is a straight transfer — the
+shooter pays exactly what the winner collects — so risking a deal-in costs
+almost precisely what winning pays.
 
-The deal-in result fully reversed: the EV agent is now the safest at the table
-in every matchup (the squash version dealt in at 1.90 against Hybrid; the EV
-version deals in at 1.22 *while Hybrid rose to 1.50 against it*). Net points
-against Hybrid are within noise of parity. The honest remaining gap is win
-rate — the EV agent folds more, and its myopic formula values every win at the
-same 7.65 points, so it can't tell a cheap hand worth abandoning from a
-half-flush worth pushing. Value-aware win estimates are the next step.
+### The verdict: not yet better than the heuristic
+
+Measured on the duplicate-seating evaluator (`experiments/duplicate.py`),
+1,000 games, every agent playing every seat on every wall:
+
+| | Win% | DI/disc% | Pts/seat |
+|---|---|---|---|
+| Hybrid | 24.0 [22.2, 25.9] | 1.59 [1.42, 1.77] | +0.130 |
+| **Learned (EV)** | 22.1 [20.4, 24.0] | **1.36 [1.21, 1.53]** | −0.130 |
+
+```
+win rate      hybrid − learned = +1.850 pp   z=+1.39  p=0.1650  (not significant)
+deal-in rate  hybrid − learned = +0.223 pp   z=+1.89  p=0.0585  (not significant)
+points diff   +1.040  95% CI [−1.336, +3.416]           (not significant)
+```
+
+**Nothing here is significant.** The EV agent is the safer discarder and the
+weaker winner, and the two cancel: on net points the confidence interval
+comfortably straddles zero. The honest summary is that a model which is
+overwhelmingly better at *predicting* deal-ins produces an agent that is
+merely *equal* at playing — the gap between a good world model and a good
+policy, which is what the next phase attacks by learning the decision itself
+rather than hand-writing the formula that consumes the predictions.
 
 ## Scoring (tai)
 

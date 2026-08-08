@@ -44,10 +44,18 @@ _TRAIN_HINT = (
 class LearnedAgent(HybridAgent):
     """Hybrid claims, EV-over-trained-models discards."""
 
-    # Empirical point stakes (200 seeded games, tai cap 6, base 1):
-    # mean winner gain 7.65, mean shooter loss 5.94.
-    WIN_VALUE = 7.65
-    DEAL_IN_COST = 5.94
+    # Empirical point stakes (400 seeded games under the table's rules:
+    # tai cap 6, base 1, no self-draw tai, tai-only accounting).
+    # Mean winner gain 8.63; mean shooter loss 8.55.
+    #
+    # Note how close these are now. With instant chip payouts off, a ron
+    # is a straight transfer — the shooter pays exactly what the winner
+    # collects — so risking a deal-in costs almost precisely what
+    # winning pays. Under the previous rules the gap was much wider
+    # (7.65 vs 5.94) because bonus-tile payouts inflated winners'
+    # takings without touching the shooter.
+    WIN_VALUE = 8.63
+    DEAL_IN_COST = 8.55
 
     # Legacy squash for danger_for (the shipped-then-superseded path).
     SQUASH_K = 0.02

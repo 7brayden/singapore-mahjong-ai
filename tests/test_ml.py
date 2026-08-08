@@ -9,7 +9,9 @@ from mahjong.ml.features import (
     DANGER_FEATURES, OUTCOME_FEATURES, danger_features, outcome_features,
 )
 from mahjong.ml.datagen import DANGER_COLUMNS, OUTCOME_COLUMNS, generate_game
-from mahjong.ml.model import LinearModel
+from mahjong.ml.model import (
+    LinearModel, load_danger_model, load_win_model,
+)
 
 
 def _midgame(seed=11, turns=30):
@@ -127,3 +129,41 @@ def test_learned_agent_plays_deterministically():
 
     r1, r2 = play(9), play(9)
     assert (r1.winner, r1.win_type, r1.turns) == (r2.winner, r2.win_type, r2.turns)
+
+
+# ── The shipped model artifacts ──────────────────────────────────────
+#
+# Everything above uses a hand-built toy model, so nothing asserted on
+# the JSON that actually ships. A corrupted or badly-retrained weights
+# file would otherwise pass the whole suite (audit finding F5).
+
+def test_packaged_danger_model_is_sane():
+    model = load_danger_model()
+    assert model is not None, "danger_model.json missing from the package"
+    assert model.features == list(DANGER_FEATURES)  # order matters
+    assert len(model.coef) == len(model.mean) == len(model.scale)
+    assert all(s > 0 for s in model.scale)
+
+    game = _midgame()
+    visible = game.get_visible_counts(0)
+    threat = estimate_opponent_threats(0, game)
+    probs = [model.predict(danger_features(t, 0, game, visible, threat))
+             for t in set(game.hands[0].tiles)]
+    assert all(0.0 < p < 1.0 for p in probs)
+    # Mid-game deal-in risk is small but not vanishing; a model that
+    # collapsed to a constant would fail the spread check.
+    assert max(probs) < 0.6
+    assert max(probs) > min(probs)
+
+
+def test_packaged_win_model_is_sane():
+    model = load_win_model()
+    assert model is not None, "win_model.json missing from the package"
+    assert model.features == list(OUTCOME_FEATURES)
+
+    game = _midgame()
+    threat = estimate_opponent_threats(0, game)
+    # A tenpai hand must be rated likelier to win than a far-off one
+    near = model.predict(outcome_features(0, game, 0, 20, threat))
+    far = model.predict(outcome_features(0, game, 5, 4, threat))
+    assert 0.0 < far < near < 1.0
