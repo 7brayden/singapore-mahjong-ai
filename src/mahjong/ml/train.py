@@ -21,6 +21,7 @@ import argparse
 import csv
 import gzip
 import os
+import subprocess
 from datetime import date
 
 import numpy as np
@@ -36,7 +37,14 @@ from mahjong.ml.model import (
     LinearModel, DANGER_MODEL_PATH, WIN_MODEL_PATH,
 )
 
-TEST_FOLD = 4  # game_id % 5 == 4 → held out
+TEST_FRACTION = 0.2
+SPLIT_SEED = 0
+
+# NOTE: the split is a seeded random choice of GAME ids, not a modulus.
+# datagen assigns lineups by `game_id % len(LINEUPS)`, so any modulus
+# that shares a factor with the lineup count silently sorts whole
+# lineups into one side — the original `game_id % 5 == 4` put exactly
+# one lineup in test and zero of it in train.
 
 
 def load_table(path: str):
@@ -49,8 +57,27 @@ def load_table(path: str):
 
 
 def split_by_game(data: np.ndarray, game_col: int = 0):
-    test_mask = (data[:, game_col].astype(np.int64) % 5) == TEST_FOLD
+    """Hold out a seeded random 20% of GAMES (never rows within a game)."""
+    gid = data[:, game_col].astype(np.int64)
+    games = np.unique(gid)
+    rng = np.random.default_rng(SPLIT_SEED)
+    n_test = max(1, int(round(len(games) * TEST_FRACTION)))
+    test_games = rng.permutation(games)[:n_test]
+    test_mask = np.isin(gid, test_games)
     return data[~test_mask], data[test_mask]
+
+
+def report_split_balance(data: np.ndarray, header: list) -> None:
+    """Lineups must appear on both sides — this is what the old modulus
+    split got wrong, so it is now checked out loud every run."""
+    if "lineup" not in header:
+        return
+    lineup_col = header.index("lineup")
+    train, test = split_by_game(data)
+    tr = sorted(set(train[:, lineup_col].astype(int).tolist()))
+    te = sorted(set(test[:, lineup_col].astype(int).tolist()))
+    status = "OK" if tr == te else "*** IMBALANCED ***"
+    print(f"  lineups — train {tr} / test {te}   {status}")
 
 
 def fit_logreg(train_x, train_y):
@@ -60,7 +87,20 @@ def fit_logreg(train_x, train_y):
     return scaler, clf
 
 
+def _git_commit() -> str:
+    """Short hash of the code that produced these weights (provenance)."""
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=os.path.dirname(__file__), stderr=subprocess.DEVNULL,
+        ).decode().strip()
+    except Exception:
+        return "unknown"
+
+
 def export(scaler, clf, feature_names, path, metadata):
+    metadata = {**metadata, "code_commit": _git_commit(),
+                "n_features": len(feature_names)}
     model = LinearModel(
         features=list(feature_names),
         mean=[float(v) for v in scaler.mean_],
@@ -109,6 +149,7 @@ def train_danger(data_dir: str):
     n_games = len(np.unique(data[:, 0]))
     print(f"  {len(data):,} rows from {n_games:,} games "
           f"({len(train):,} train / {len(test):,} test)")
+    report_split_balance(data, header)
     y_name = "waited_legal"
     train_x, train_y = train[:, feat_idx], train[:, col[y_name]]
     test_x, test_y = test[:, feat_idx], test[:, col[y_name]]

@@ -64,9 +64,18 @@ def test_generate_game_rows_and_labels():
     # Exactly one chosen tile per decision → one outcome row each
     assert sum(r[ch] for r in danger_rows) == len(outcome_rows)
 
+    # decision_id joins the two tables: same (game_id, decision_id) keys
+    d_key = DANGER_COLUMNS.index("decision_id")
+    o_key = OUTCOME_COLUMNS.index("decision_id")
+    o_seat = OUTCOME_COLUMNS.index("seat")
+    assert {(r[0], r[d_key]) for r in danger_rows} == \
+           {(r[0], r[o_key]) for r in outcome_rows}
+    # ...and it is unique per outcome row within a game
+    assert len({(r[0], r[o_key]) for r in outcome_rows}) == len(outcome_rows)
+
     # Outcome labels: 0 or 1 winner per game
     for game_id in (0, 1, 2):
-        winners = {r[1] for r in outcome_rows
+        winners = {r[o_seat] for r in outcome_rows
                    if r[0] == game_id and r[-2] == 1}
         assert len(winners) <= 1
 

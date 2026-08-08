@@ -52,10 +52,14 @@ LINEUPS = [
              HybridAgent("H1"), GreedyAgent("G")],
 ]
 
-DANGER_COLUMNS = (["game_id", "seat", "tile"] + DANGER_FEATURES
+# decision_id is a per-game counter shared by every row of one decision,
+# so the two tables join on (game_id, decision_id) and per-decision
+# analysis needs no fragile reconstruction from feature values.
+DANGER_COLUMNS = (["game_id", "decision_id", "lineup", "seat", "tile"]
+                  + DANGER_FEATURES
                   + ["waited", "waited_legal", "chosen", "dealt_in"])
-OUTCOME_COLUMNS = (["game_id", "seat"] + OUTCOME_FEATURES
-                   + ["won", "net_points"])
+OUTCOME_COLUMNS = (["game_id", "decision_id", "lineup", "seat"]
+                   + OUTCOME_FEATURES + ["won", "net_points"])
 
 
 def _opponent_waits(game: GameState, player_idx: int, cache: dict) -> dict:
@@ -99,13 +103,15 @@ def _ron_would_be_legal(game: GameState, tile_id: int, waits: dict,
 
 
 def generate_game(game_id: int, seed: int, lineup_fn,
-                  danger_rows: list, outcome_rows: list) -> dict:
+                  danger_rows: list, outcome_rows: list,
+                  lineup_idx: int = 0) -> dict:
     """Play one seeded game, appending labeled rows to both tables."""
     game = GameState(lineup_fn(), seed=seed)
     gen = game.step_game()
     wait_cache: dict = {}
     outcome_start = len(outcome_rows)
     last_chosen = None  # (row_index, seat, tile) of the latest chosen discard
+    decision_id = 0
 
     request = None
     try:
@@ -130,15 +136,16 @@ def generate_game(game_id: int, seed: int, lineup_fn,
                     if chosen:
                         last_chosen = (len(danger_rows), seat, tile)
                     danger_rows.append(
-                        [game_id, seat, tile]
+                        [game_id, decision_id, lineup_idx, seat, tile]
                         + danger_features(tile, seat, game, visible, threat)
                         + [int(waited), int(legal), chosen, 0])
 
                 outcome_rows.append(
-                    [game_id, seat]
+                    [game_id, decision_id, lineup_idx, seat]
                     + outcome_features(seat, game, evals[0]["shanten"],
                                        evals[0]["acceptance"], threat)
                     + [0, 0])
+                decision_id += 1
             request = gen.send(answer)
     except StopIteration as stop:
         result = stop.value
@@ -149,8 +156,9 @@ def generate_game(game_id: int, seed: int, lineup_fn,
         if seat == result.dealt_in_by and tile == result.win_tile:
             danger_rows[row_idx][-1] = 1  # dealt_in
     payments = result.payments or [0, 0, 0, 0]
+    seat_col = OUTCOME_COLUMNS.index("seat")
     for i in range(outcome_start, len(outcome_rows)):
-        seat = outcome_rows[i][1]
+        seat = outcome_rows[i][seat_col]
         outcome_rows[i][-2] = 1 if result.winner == seat else 0
         outcome_rows[i][-1] = payments[seat]
 
@@ -163,7 +171,7 @@ def _run_one(task):
     danger_rows: list = []
     outcome_rows: list = []
     stats = generate_game(game_id, seed, LINEUPS[lineup_idx],
-                          danger_rows, outcome_rows)
+                          danger_rows, outcome_rows, lineup_idx)
     return danger_rows, outcome_rows, stats["win_type"]
 
 
