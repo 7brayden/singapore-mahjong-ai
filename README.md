@@ -249,13 +249,28 @@ deal-in rate  p<0.0001 (significant)      win rate  p=0.0002 (significant)
 points diff   learned +1.448/seed  95% CI [−0.951, +3.847]  (not yet significant)
 ```
 
-Phase A's +0.50/seed points lead tripled to +1.45/seed. Still shy of
-significance — ~3,000 seeds would resolve it if the effect holds — but the
-shape of the player is now set: claims freely for tempo and value, wins
-fewer and fatter hands, and remains the safest discarder at the table even
-while exposing the most melds. Both halves of every decision it makes are
-now model-priced; the remaining hand-written pieces are the own-turn kong
-rule and the EV formula itself.
+At 1,000 games the learned side led on points (+1.45/seed, not significant),
+so we ran the properly powered test: 3,000 fresh seeds, 6,000 games. It
+reversed the sign:
+
+```
+6,000 games — points diff: hybrid +1.275/seed  95% CI [+0.285, +2.265]
+→ HYBRID is genuinely ahead (~0.16 pts/seat/game)
+deal-in:  learned 1.22% vs 1.68%  p<0.0001 — learned confirmed safer
+win rate: learned 20.4% vs 24.9%  p<0.0001 — and confirmed slower
+```
+
+The two earlier 1,000-game leads were noise — the exact trap the evaluator
+exists to catch, caught. The arithmetic of the loss is instructive: deal-ins
+are rare (~1.5 per 100 discards), so cutting them 27% saves only ~0.03
+pts/seat, while conceding 4.5 pp of win rate costs ~0.40. The agent
+over-folds — a predictable consequence of pairing a sharp risk model
+(deal-in AUC 0.87) with a fuzzy value model (R² 0.066): the EV comparison
+trusts its precise term and under-weights its noisy one. The learned player
+is statistically the safest and most value-selective at the table, and
+statistically the weaker points earner. Fixing the value signal — richer
+features, a stronger regressor, or self-play data — is where the next
+strength comes from.
 
 ## Scoring (tai)
 

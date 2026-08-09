@@ -10,7 +10,7 @@ requires-python = ">=3.9"
 
 [project.optional-dependencies]
 plots = ["matplotlib", "numpy"]
-server = ["fastapi", "uvicorn[standard]"]
+server = ["fastapi", "uvicorn[standard]", "httpx"]  # httpx: coach -> Anthropic API
 dev = ["pytest", "httpx"]
 ml = ["numpy", "scikit-learn"]  # training only — inference is pure Python
 

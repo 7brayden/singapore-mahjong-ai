@@ -134,6 +134,18 @@ export const getHint = (gameId: string) =>
 export const getAnalysis = (gameId: string) =>
   request<Analysis>("GET", `/games/${gameId}/analysis`);
 
+export interface Explanation {
+  text: string;
+  /** "claude" when the LLM wrote it, "template" for the offline fallback. */
+  source: "claude" | "template";
+  principles: string[];
+  recommendation: string | null;
+  model?: string;
+}
+
+export const postExplain = (gameId: string) =>
+  request<Explanation>("POST", `/games/${gameId}/explain`);
+
 export function openGameSocket(gameId: string, onView: (view: GameView) => void): WebSocket {
   const wsBase = API_BASE.replace(/^http/, "ws");
   const socket = new WebSocket(`${wsBase}/games/${gameId}/ws`);

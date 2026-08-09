@@ -4,6 +4,12 @@ services:
     container_name: mahjong-api
     ports:
       - "8000:8000"
+    environment:
+      # Coach LLM. Set in your shell or a local .env file (gitignored);
+      # the key stays server-side — the browser never sees it. Without
+      # it the coach falls back to a deterministic template.
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - COACH_MODEL=${COACH_MODEL:-claude-sonnet-5}
 
   web:
     build: ./frontend

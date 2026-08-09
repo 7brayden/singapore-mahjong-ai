@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { Analysis, DiscardAnalysis, GameView } from "../api";
+import type { Analysis, DiscardAnalysis, Explanation, GameView } from "../api";
 import { heat } from "../heat";
 import { tileFace } from "../tiles";
 import { TileView } from "./Tile";
@@ -74,10 +74,14 @@ interface SidebarProps {
   hintOpen: boolean;
   onToggleHint: () => void;
   onHide: () => void;
+  explanation: Explanation | null;
+  explainLoading: boolean;
+  onExplain: () => void;
 }
 
 export function Sidebar({ view, analysis, displayNames, personas, paused,
-                          hintText, hintOpen, onToggleHint, onHide }: SidebarProps) {
+                          hintText, hintOpen, onToggleHint, onHide,
+                          explanation, explainLoading, onExplain }: SidebarProps) {
   const [expanded, setExpanded] = useState(0);
   const shanten = analysis?.shanten ?? null;
   const filled = shanten === null ? 0 : Math.max(0, Math.min(4, 4 - Math.max(shanten, 0)));
@@ -146,6 +150,35 @@ export function Sidebar({ view, analysis, displayNames, personas, paused,
             </div>
           );
         })()}
+      </section>
+
+      <section className="sidebar-section">
+        <div className="label-row">
+          <span className="section-label">Ask the coach</span>
+          {explanation && (
+            <span className="advisor-note-right">
+              {explanation.source === "claude"
+                ? "explained by Claude" : "offline explanation"}
+            </span>
+          )}
+        </div>
+        {explanation ? (
+          <div className="coach-note">
+            <p>{explanation.text}</p>
+            {explanation.principles.length > 0 && (
+              <div className="principle-chips">
+                {explanation.principles.map((p) => (
+                  <span key={p} className="principle-chip">{p}</span>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <button className="hint-button coach-explain"
+                  onClick={onExplain} disabled={explainLoading}>
+            {explainLoading ? "Thinking…" : "師 Explain this decision"}
+          </button>
+        )}
       </section>
 
       <section className="sidebar-section">

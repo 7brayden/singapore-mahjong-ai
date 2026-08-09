@@ -29,6 +29,9 @@ class ManagedGame:
     human_seat: int
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     sockets: List[WebSocket] = field(default_factory=list)
+    # One coach explanation per decision state — a re-click must not
+    # re-bill the API. {"key": fingerprint, "payload": response}
+    explain_cache: Dict = field(default_factory=dict)
 
     def view(self) -> Dict:
         return self.interactive.view_for(self.human_seat)

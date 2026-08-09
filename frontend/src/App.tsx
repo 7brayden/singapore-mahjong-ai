@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Analysis, GameView, createGame, getAnalysis, getHint, openGameSocket, postAction,
+  Analysis, Explanation, GameView, createGame, getAnalysis, getHint,
+  openGameSocket, postAction, postExplain,
 } from "./api";
 import { tileFace } from "./tiles";
 import { TopBar } from "./components/TopBar";
@@ -38,6 +39,8 @@ export default function App() {
   const [hintText, setHintText] = useState<string | null>(null);
   const [hintOpen, setHintOpen] = useState(false);
   const [claimCoachLine, setClaimCoachLine] = useState<string | null>(null);
+  const [explanation, setExplanation] = useState<Explanation | null>(null);
+  const [explainLoading, setExplainLoading] = useState(false);
   const [setupError, setSetupError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [announcement, setAnnouncement] = useState("");
@@ -90,6 +93,8 @@ export default function App() {
       setHintOpen(false);
       setHintText(null);
       setClaimCoachLine(null);
+      setExplanation(null);
+      setExplainLoading(false);
       setBotBeat(false);
       setPhase("playing");
       socketRef.current = openGameSocket(created.game_id, setView);
@@ -131,6 +136,8 @@ export default function App() {
       setHintOpen(false);
       setHintText(null);
       setClaimCoachLine(null);
+      setExplanation(null);
+      setExplainLoading(false);
       if (!next.game_over) {
         setBotBeat(true);
         if (beatTimer.current) window.clearTimeout(beatTimer.current);
@@ -190,6 +197,18 @@ export default function App() {
     }
     return "";
   }, [view]);
+
+  const requestExplanation = useCallback(async () => {
+    if (!gameId || explainLoading) return;
+    setExplainLoading(true);
+    try {
+      setExplanation(await postExplain(gameId));
+    } catch {
+      /* no pending decision or server hiccup — button stays available */
+    } finally {
+      setExplainLoading(false);
+    }
+  }, [gameId, explainLoading]);
 
   const requestHint = useCallback(async () => {
     if (!gameId) return;
@@ -341,6 +360,9 @@ export default function App() {
             hintOpen={hintOpen}
             onToggleHint={() => (hintOpen ? setHintOpen(false) : requestHint())}
             onHide={() => setCoachVisible(false)}
+            explanation={explanation}
+            explainLoading={explainLoading}
+            onExplain={requestExplanation}
           />
         )}
       </div>

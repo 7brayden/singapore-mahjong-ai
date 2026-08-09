@@ -8,6 +8,7 @@ Endpoints:
     POST /games/{id}/action     answer the pending decision
     GET  /games/{id}/hint       what the seat's own agent would do
     GET  /games/{id}/analysis   learning stats (shanten, danger, threats)
+    POST /games/{id}/explain    coach lesson (Claude if key set, else template)
     DEL  /games/{id}            drop the game
     WS   /games/{id}/ws         view pushed on connect and after actions
 
@@ -26,6 +27,7 @@ from mahjong.game import DiscardRequest, ClaimRequest, ChowRequest, KongRequest
 from mahjong.tiles import NUM_TOTAL_UNIQUE, tile_name, tile_short, suit_of, rank_of
 from mahjong.server.manager import GameManager, BOT_TYPES, ManagedGame
 from mahjong.server.analysis import analyze_seat
+from mahjong.coach import explain_situation
 
 app = FastAPI(title="Singapore Mahjong AI", version=mahjong.__version__)
 app.add_middleware(
@@ -131,6 +133,60 @@ async def hint(game_id: str):
 async def analysis(game_id: str):
     managed = _get_or_404(game_id)
     return analyze_seat(managed.interactive.game, managed.human_seat)
+
+
+def _suggestion_text(request, suggestion) -> str:
+    """Render the learned advisor's choice as one plain sentence."""
+    if isinstance(request, DiscardRequest):
+        return f"The trained advisor would discard {tile_name(suggestion)}."
+    if isinstance(request, ClaimRequest):
+        verb = f"take the {request.claim_type} of {tile_name(request.tile_id)}"
+        return (f"The trained advisor would {verb}." if suggestion
+                else f"The trained advisor would pass on the "
+                     f"{request.claim_type} of {tile_name(request.tile_id)}.")
+    if isinstance(request, ChowRequest):
+        if suggestion:
+            a, b = suggestion
+            return (f"The trained advisor would chow the "
+                    f"{tile_name(request.tile_id)} with {tile_name(a)} "
+                    f"and {tile_name(b)}.")
+        return (f"The trained advisor would pass on chowing the "
+                f"{tile_name(request.tile_id)}.")
+    if isinstance(request, KongRequest):
+        if suggestion:
+            kind, tile = suggestion
+            return (f"The trained advisor would declare the {kind} kong "
+                    f"of {tile_name(tile)}.")
+        return "The trained advisor would hold off on declaring a kong."
+    return ""
+
+
+@app.post("/games/{game_id}/explain")
+async def explain(game_id: str):
+    """The coach: engine numbers + retrieved principles → a short lesson.
+
+    Uses the Anthropic API when ANTHROPIC_API_KEY is set (server-side
+    env only — the key never reaches the browser); otherwise renders a
+    deterministic template over the same numbers. Cached per decision
+    state so repeat clicks never re-bill.
+    """
+    managed = _get_or_404(game_id)
+    interactive = managed.interactive
+    if interactive.pending is None:
+        raise HTTPException(409, "No pending decision")
+
+    pending_view = interactive.view_for(managed.human_seat)["pending"]
+    key = f"{interactive.game.turn}:{sorted(pending_view.items())!r}"
+    cached = managed.explain_cache
+    if cached.get("key") == key:
+        return cached["payload"]
+
+    suggestion = interactive.game.dispatch_to_agent(interactive.pending)
+    text = _suggestion_text(interactive.pending, suggestion)
+    payload = await explain_situation(
+        interactive.game, managed.human_seat, pending_view, text)
+    managed.explain_cache = {"key": key, "payload": payload}
+    return payload
 
 
 @app.delete("/games/{game_id}")
