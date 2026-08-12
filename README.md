@@ -415,12 +415,54 @@ python3 experiments/run_benchmark.py      # full benchmark (~5-10 min)
 python3 experiments/generate_plots.py     # result charts (needs matplotlib)
 ```
 
+## The coach
+
+`POST /games/{id}/explain` turns a live decision into a short lesson. The
+split is deliberate and load-bearing: **the engine computes every number**
+(shanten, deal-in probability, hand value, opponent threats, and the learned
+agent's recommendation), **retrieval picks the principles** that fit the
+situation from `mahjong/coach/corpus.py` — a small tagged knowledge base
+encoding *this table's* house rules alongside strategy measured in this
+project's own simulations — and **the LLM only writes prose**. Its system
+prompt forbids inventing numbers, and it explains trade-offs rather than
+defending the bot: the recommended move is just the argmax of the same
+numbers shown to the player.
+
+Retrieval is lexical tag-matching over ~15 curated chunks, not embeddings —
+at this corpus size an index would be ceremony. Revisit past ~50 chunks.
+
+### Backends
+
+Selected from the environment; the first configured credential wins, and
+`COACH_PROVIDER` (`azure` | `anthropic` | `template`) pins one explicitly.
+
+| Provider | Environment |
+|---|---|
+| **Azure OpenAI** | `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_DEPLOYMENT`, optional `AZURE_OPENAI_API_VERSION` |
+| **Anthropic** | `ANTHROPIC_API_KEY`, optional `COACH_MODEL` (default `claude-opus-5`) |
+| **Template** | none — always available |
+
+`AZURE_OPENAI_DEPLOYMENT` is the deployment *name you chose in the Azure
+portal*, not a public model id; using a model id there is the usual cause of
+a 404. Put the values in a `.env` file beside `docker-compose.yml`
+(gitignored) — they stay server-side and never reach the browser.
+
+The template backend is not an error path. With no credentials, an
+unreachable endpoint, a refused request, or an SDK that isn't installed, the
+coach renders the same content deterministically — it degrades to *less
+fluent*, never to *broken*. Explanations are cached per decision state, so
+re-clicking never re-bills.
+
+**Before any public deployment**, replace the single shared server-side key
+with per-user credentials or metered access: as written, every visitor's
+explanations bill one account.
+
 ## Future work
 
 - Special hands: thirteen orphans, heaven/earth wins
 - Post-game review screen ("Review game with coach") over a hand event log
 - Multi-hand browser sessions backed by session.py (dealer rotation in the UI)
-- LLM move explanations (`/explain`) grounded in the analysis endpoint + RAG strategy corpus
+- Per-user LLM billing before any public deployment (see The coach, below)
 - Value-aware win model (predict points, not just P(win)) so the EV agent pushes big hands
 - Lookahead: sample future draws, estimate discard value
 - Tune hybrid weights to detected opponent strength

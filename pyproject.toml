@@ -10,7 +10,11 @@ requires-python = ">=3.9"
 
 [project.optional-dependencies]
 plots = ["matplotlib", "numpy"]
-server = ["fastapi", "uvicorn[standard]", "httpx"]  # httpx: coach -> Anthropic API
+server = ["fastapi", "uvicorn[standard]"]
+# Coach LLM backends. Both optional and imported lazily — the coach
+# falls back to its deterministic template when neither is installed.
+coach = ["openai"]        # Azure OpenAI (the configured backend)
+coach-anthropic = ["anthropic"]  # Anthropic Messages API
 dev = ["pytest", "httpx"]
 ml = ["numpy", "scikit-learn"]  # training only — inference is pure Python
 

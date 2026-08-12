@@ -5,11 +5,21 @@ services:
     ports:
       - "8000:8000"
     environment:
-      # Coach LLM. Set in your shell or a local .env file (gitignored);
-      # the key stays server-side — the browser never sees it. Without
-      # it the coach falls back to a deterministic template.
+      # Coach LLM credentials. Set them in a local .env file next to
+      # this compose file (gitignored). They stay server-side — the
+      # browser never sees them. With none set, the coach falls back to
+      # its deterministic template.
+      #
+      # Azure OpenAI (the configured backend):
+      - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT:-}
+      - AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY:-}
+      - AZURE_OPENAI_DEPLOYMENT=${AZURE_OPENAI_DEPLOYMENT:-}
+      - AZURE_OPENAI_API_VERSION=${AZURE_OPENAI_API_VERSION:-}
+      # Anthropic direct (alternative backend):
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      - COACH_MODEL=${COACH_MODEL:-claude-sonnet-5}
+      - COACH_MODEL=${COACH_MODEL:-}
+      # Pin a backend explicitly: azure | anthropic | template
+      - COACH_PROVIDER=${COACH_PROVIDER:-}
 
   web:
     build: ./frontend

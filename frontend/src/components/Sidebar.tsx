@@ -157,8 +157,9 @@ export function Sidebar({ view, analysis, displayNames, personas, paused,
           <span className="section-label">Ask the coach</span>
           {explanation && (
             <span className="advisor-note-right">
-              {explanation.source === "claude"
-                ? "explained by Claude" : "offline explanation"}
+              {explanation.source === "template"
+                ? "offline explanation"
+                : `explained by ${explanation.model || explanation.source}`}
             </span>
           )}
         </div>

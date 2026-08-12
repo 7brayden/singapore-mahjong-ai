@@ -1,7 +1,9 @@
 """Coach tests: retrieval, situation building, fallback, endpoint.
 
-No test here ever calls the Anthropic API — the key is scrubbed from
-the environment so every path exercises the deterministic template.
+No test here ever calls a live LLM: every provider credential is
+scrubbed from the environment, so all paths exercise the deterministic
+template. The scrub is autouse and covers both backends — a test that
+reached the network would bill a real account.
 """
 
 import pytest
@@ -11,13 +13,24 @@ from mahjong.game import GameState, advance_turns
 from mahjong.agents import GreedyAgent
 from mahjong.coach.corpus import CHUNKS
 from mahjong.coach.retrieve import retrieve, situation_tags
-from mahjong.coach.explain import build_situation, fallback_text
+from mahjong.coach.explain import (
+    _provider, build_situation, fallback_text,
+)
 from mahjong.server.app import app, manager
 
 
+COACH_ENV_VARS = [
+    "COACH_PROVIDER", "COACH_MODEL",
+    "ANTHROPIC_API_KEY",
+    "AZURE_OPENAI_API_KEY", "AZURE_OPENAI_ENDPOINT",
+    "AZURE_OPENAI_DEPLOYMENT", "AZURE_OPENAI_API_VERSION",
+]
+
+
 @pytest.fixture(autouse=True)
-def _no_api_key(monkeypatch):
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+def _no_provider_credentials(monkeypatch):
+    for name in COACH_ENV_VARS:
+        monkeypatch.delenv(name, raising=False)
 
 
 def _situation(seed=11, turns=30, seat=0):
@@ -110,5 +123,48 @@ def test_explain_endpoint_returns_template_without_key():
         assert isinstance(body["principles"], list)
         # Second call is served from the per-decision cache
         assert client.post(f"/games/{gid}/explain").json() == body
+    finally:
+        manager.remove(gid)
+
+
+# ── Provider selection (no network in any case) ──────────────────────
+
+def test_provider_defaults_to_template_without_credentials():
+    assert _provider() == "template"
+
+
+def test_azure_credentials_win_by_default(monkeypatch):
+    monkeypatch.setenv("AZURE_OPENAI_API_KEY", "fake")
+    assert _provider() == "azure"
+    # Anthropic present too: Azure still wins as the configured backend
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "fake")
+    assert _provider() == "azure"
+
+
+def test_anthropic_used_when_only_anthropic_configured(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "fake")
+    assert _provider() == "anthropic"
+
+
+def test_coach_provider_pins_the_backend(monkeypatch):
+    monkeypatch.setenv("AZURE_OPENAI_API_KEY", "fake")
+    monkeypatch.setenv("COACH_PROVIDER", "template")
+    assert _provider() == "template"
+
+
+def test_endpoint_falls_back_to_template_when_provider_errors(monkeypatch):
+    # Azure "configured" but pointed nowhere: the request must fail
+    # inside the provider and still return a usable lesson.
+    monkeypatch.setenv("AZURE_OPENAI_API_KEY", "fake")
+    monkeypatch.setenv("AZURE_OPENAI_ENDPOINT", "https://localhost:1")
+    monkeypatch.setenv("AZURE_OPENAI_DEPLOYMENT", "nonexistent")
+    client = TestClient(app)
+    created = client.post("/games", json={
+        "seed": 6, "human_seat": 0, "bots": ["hybrid"] * 4}).json()
+    gid = created["game_id"]
+    try:
+        body = client.post(f"/games/{gid}/explain").json()
+        assert body["source"] == "template"
+        assert body["text"]
     finally:
         manager.remove(gid)

@@ -136,8 +136,8 @@ export const getAnalysis = (gameId: string) =>
 
 export interface Explanation {
   text: string;
-  /** "claude" when the LLM wrote it, "template" for the offline fallback. */
-  source: "claude" | "template";
+  /** Which backend wrote it; "template" is the offline fallback. */
+  source: "azure" | "anthropic" | "template";
   principles: string[];
   recommendation: string | null;
   model?: string;

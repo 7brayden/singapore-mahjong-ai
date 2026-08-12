@@ -4,20 +4,28 @@ The LLM's contract is narrow on purpose: it receives the engine's
 numbers and the retrieved principles, and its ONLY job is prose. The
 system prompt forbids inventing numbers; the recommendation it explains
 is the learned agent's, computed by the engine before the LLM is ever
-involved. With no ANTHROPIC_API_KEY in the environment (or on any API
-failure), a deterministic template renders the same content — the coach
-degrades to "less fluent", never to "wrong" or "broken".
+involved.
 
-The key is read server-side from the environment at call time and never
-leaves this process. For a future multi-user deployment the call site
-is the single place to swap in per-user billing.
+Three backends, selected from the environment by _provider():
+
+    azure      Azure OpenAI chat completions (deployment-addressed)
+    anthropic  Anthropic Messages API via the official SDK
+    template   deterministic prose over the same numbers
+
+The template is not an error path — with no credentials, or on any API
+failure, the coach degrades to "less fluent", never to "wrong" or
+"broken". Provider SDKs are imported lazily, so neither is a hard
+dependency of the server.
+
+Credentials are read server-side from the environment at call time and
+never leave this process; the browser only ever receives rendered text.
+For a future multi-user deployment, the two _*_text functions are the
+single place to swap in per-user billing.
 """
 
 import json
 import os
 from typing import Dict, List, Optional
-
-import httpx
 
 from mahjong.tiles import (
     NUM_STANDARD_UNIQUE, is_honor, suit_of, tile_name,
@@ -26,9 +34,10 @@ from mahjong.opponent_model import estimate_opponent_threats
 from mahjong.server.analysis import analyze_seat
 from mahjong.coach.retrieve import retrieve
 
-ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
-ANTHROPIC_VERSION = "2023-06-01"
-DEFAULT_MODEL = "claude-sonnet-5"
+# Azure addresses a *deployment you named*, not a public model id.
+DEFAULT_AZURE_API_VERSION = "2024-10-21"
+DEFAULT_ANTHROPIC_MODEL = "claude-opus-5"
+MAX_OUTPUT_TOKENS = 2000
 
 SYSTEM_PROMPT = """You are the table coach for a Singapore mahjong training app. You explain one decision to the player, using ONLY the numbers in the SITUATION JSON — never invent probabilities, values, or tile facts. The engine's recommendation is given; explain the trade-off behind it, including what the tempting alternative costs. You advise the player; you do not defend the bot.
 
@@ -136,29 +145,96 @@ def fallback_text(situation: Dict, principles: List[Dict]) -> str:
     return " ".join(parts) or "No decision to explain right now."
 
 
-async def llm_text(situation: Dict, principles: List[Dict],
-                   api_key: str) -> str:
-    prompt = (
+# ── Providers ────────────────────────────────────────────────────────
+
+def _provider() -> str:
+    """Which backend to use, decided from the environment.
+
+    COACH_PROVIDER pins it explicitly (azure | anthropic | template);
+    otherwise the first configured credential wins, and "template" is
+    the always-available floor.
+    """
+    pinned = os.environ.get("COACH_PROVIDER", "").strip().lower()
+    if pinned:
+        return pinned
+    if os.environ.get("AZURE_OPENAI_API_KEY", "").strip():
+        return "azure"
+    if os.environ.get("ANTHROPIC_API_KEY", "").strip():
+        return "anthropic"
+    return "template"
+
+
+def _build_prompt(situation: Dict, principles: List[Dict]) -> str:
+    return (
         "SITUATION:\n" + json.dumps(situation, indent=1) +
         "\n\nRETRIEVED PRINCIPLES:\n" +
         "\n".join(f"- {c['title']}: {c['text']}" for c in principles))
-    async with httpx.AsyncClient(timeout=25.0) as client:
-        resp = await client.post(
-            ANTHROPIC_URL,
-            headers={
-                "x-api-key": api_key,
-                "anthropic-version": ANTHROPIC_VERSION,
-                "content-type": "application/json",
-            },
-            json={
-                "model": os.environ.get("COACH_MODEL", DEFAULT_MODEL),
-                "max_tokens": 300,
-                "system": SYSTEM_PROMPT,
-                "messages": [{"role": "user", "content": prompt}],
-            })
-        resp.raise_for_status()
-        data = resp.json()
-    return "".join(block.get("text", "") for block in data["content"]).strip()
+
+
+async def _azure_text(prompt: str) -> str:
+    """Azure OpenAI chat completions.
+
+    `model` here is the DEPLOYMENT NAME you chose in the Azure portal,
+    not a public model id — the most common source of 404s.
+    """
+    from openai import AsyncAzureOpenAI  # lazy: optional dependency
+
+    deployment = os.environ.get("AZURE_OPENAI_DEPLOYMENT", "").strip()
+    if not deployment:
+        raise RuntimeError("AZURE_OPENAI_DEPLOYMENT is not set")
+
+    client = AsyncAzureOpenAI(
+        azure_endpoint=os.environ["AZURE_OPENAI_ENDPOINT"].strip(),
+        api_key=os.environ["AZURE_OPENAI_API_KEY"].strip(),
+        api_version=os.environ.get("AZURE_OPENAI_API_VERSION",
+                                   DEFAULT_AZURE_API_VERSION).strip(),
+        timeout=25.0,
+    )
+    messages = [{"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": prompt}]
+    try:
+        resp = await client.chat.completions.create(
+            model=deployment, messages=messages,
+            max_tokens=MAX_OUTPUT_TOKENS)
+    except Exception as exc:
+        # Reasoning-family deployments reject max_tokens and demand
+        # max_completion_tokens. The error is confusing enough that it
+        # is worth retrying rather than surfacing as a dead coach.
+        if "max_completion_tokens" not in str(exc):
+            raise
+        resp = await client.chat.completions.create(
+            model=deployment, messages=messages,
+            max_completion_tokens=MAX_OUTPUT_TOKENS)
+    return (resp.choices[0].message.content or "").strip()
+
+
+async def _anthropic_text(prompt: str) -> str:
+    """Anthropic Messages API via the official SDK.
+
+    Server-side fallbacks are on: if safety classifiers decline the
+    request, the API re-runs it on the recommended model in the same
+    call rather than handing back a refusal. A chain that still refuses
+    raises, and the caller degrades to the template.
+    """
+    from anthropic import AsyncAnthropic  # lazy: optional dependency
+
+    client = AsyncAnthropic(timeout=25.0)
+    resp = await client.beta.messages.create(
+        model=os.environ.get("COACH_MODEL", DEFAULT_ANTHROPIC_MODEL),
+        max_tokens=MAX_OUTPUT_TOKENS,
+        # Effort low: the model is narrating numbers the engine already
+        # computed, not solving the position. max_tokens covers thinking
+        # and text together, hence the headroom above.
+        output_config={"effort": "low"},
+        betas=["server-side-fallback-2026-07-01"],
+        fallbacks="default",
+        system=SYSTEM_PROMPT,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    if resp.stop_reason == "refusal":
+        raise RuntimeError("coach request was declined")
+    return "".join(block.text for block in resp.content
+                   if block.type == "text").strip()
 
 
 async def explain_situation(game, seat: int, pending: Optional[Dict],
@@ -170,15 +246,24 @@ async def explain_situation(game, seat: int, pending: Optional[Dict],
         "principles": [c["title"] for c in principles],
         "recommendation": suggestion_text,
     }
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
-    if api_key:
+
+    provider = _provider()
+    if provider in ("azure", "anthropic"):
         try:
-            payload["text"] = await llm_text(situation, principles, api_key)
-            payload["source"] = "claude"
-            payload["model"] = os.environ.get("COACH_MODEL", DEFAULT_MODEL)
+            prompt = _build_prompt(situation, principles)
+            if provider == "azure":
+                payload["text"] = await _azure_text(prompt)
+                payload["model"] = os.environ.get(
+                    "AZURE_OPENAI_DEPLOYMENT", "")
+            else:
+                payload["text"] = await _anthropic_text(prompt)
+                payload["model"] = os.environ.get(
+                    "COACH_MODEL", DEFAULT_ANTHROPIC_MODEL)
+            payload["source"] = provider
             return payload
         except Exception:
             pass  # degrade to the template, never to an error
+
     payload["text"] = fallback_text(situation, principles)
     payload["source"] = "template"
     return payload
