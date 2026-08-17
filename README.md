@@ -453,6 +453,20 @@ coach renders the same content deterministically — it degrades to *less
 fluent*, never to *broken*. Explanations are cached per decision state, so
 re-clicking never re-bills.
 
+That silence is right during play and wrong while setting up — a mistyped
+deployment name looks exactly like no credentials. Check the configuration
+directly instead of guessing:
+
+```bash
+pip install -e ".[server,coach]"
+PYTHONPATH=src python3 -m mahjong.coach.check
+```
+
+It prints the selected provider and every variable (keys masked), makes one
+tiny real call, and on failure translates the error — a 404 into "that's a
+model id, not your deployment name", a 401 into "wrong key for this
+resource". Exits non-zero on failure, so it works in CI too.
+
 **Before any public deployment**, replace the single shared server-side key
 with per-user credentials or metered access: as written, every visitor's
 explanations bill one account.

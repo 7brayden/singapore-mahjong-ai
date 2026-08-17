@@ -168,3 +168,24 @@ def test_endpoint_falls_back_to_template_when_provider_errors(monkeypatch):
         assert body["text"]
     finally:
         manager.remove(gid)
+
+
+# ── Setup diagnostic ─────────────────────────────────────────────────
+
+def test_check_reports_template_and_succeeds_without_credentials(capsys):
+    from mahjong.coach.check import main
+    assert main() == 0
+    out = capsys.readouterr().out
+    assert "selected provider          template" in out
+    assert "AZURE_OPENAI_DEPLOYMENT" in out
+
+
+def test_check_never_prints_a_whole_key(monkeypatch, capsys):
+    from mahjong.coach.check import main
+    secret = "super-secret-key-value-9999"
+    monkeypatch.setenv("AZURE_OPENAI_API_KEY", secret)
+    monkeypatch.setenv("COACH_PROVIDER", "template")  # no network
+    main()
+    out = capsys.readouterr().out
+    assert secret not in out
+    assert "9999" in out  # last 4 shown, enough to tell keys apart
