@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { GameView, PendingView } from "../api";
+import type { Explanation, GameView, PendingView } from "../api";
 import { tileFace, tileShortZh } from "../tiles";
 import { TileView } from "./Tile";
 
@@ -10,11 +10,15 @@ interface ClaimPromptProps {
   pending: PendingView;   // type "claim" or "chow"
   discarderName: string;
   coachLine: string | null;
+  explanation: Explanation | null;
+  explainLoading: boolean;
+  onExplain: () => void;
   onClaim: (accept: boolean) => void;          // for pong/kong claims
   onChow: (option: [number, number] | null) => void;
 }
 
 export function ClaimPrompt({ view, pending, discarderName, coachLine,
+                              explanation, explainLoading, onExplain,
                               onClaim, onChow }: ClaimPromptProps) {
   const tile = pending.tile ?? -1;
   const isChow = pending.type === "chow";
@@ -23,12 +27,16 @@ export function ClaimPrompt({ view, pending, discarderName, coachLine,
   const [selectedChow, setSelectedChow] = useState(0);
   const [secondsLeft, setSecondsLeft] = useState(AUTO_PASS_SECONDS);
   const paused = useRef(false);
+  // Asking the coach must never cost you the decision: the timer holds
+  // while an explanation is loading or on screen.
+  const coachHold = useRef(false);
+  coachHold.current = explainLoading || explanation !== null;
 
   const pass = () => (isChow ? onChow(null) : onClaim(false));
 
   useEffect(() => {
     const timer = setInterval(() => {
-      if (paused.current) return;
+      if (paused.current || coachHold.current) return;
       setSecondsLeft((s) => s - 1);
     }, 1000);
     return () => clearInterval(timer);
@@ -63,27 +71,39 @@ export function ClaimPrompt({ view, pending, discarderName, coachLine,
               {discarderName} discarded it · {holdNote}
             </div>
           </div>
-          <div className="claim-countdown" aria-live="polite">
-            auto-pass in {Math.max(0, secondsLeft)}s
+          <div className="claim-countdown" role="timer" aria-live="polite">
+            {explainLoading || explanation ? (
+              <span className="cd-text held">paused — reading the coach</span>
+            ) : (
+              <>
+                <span className={`cd-text${secondsLeft <= 2 ? " low" : ""}`}>
+                  passes in {Math.max(0, secondsLeft)}s
+                </span>
+                <span className="cd-track" aria-hidden="true">
+                  <span
+                    className={`cd-fill${secondsLeft <= 2 ? " low" : ""}`}
+                    style={{ transform: `scaleX(${Math.max(0, secondsLeft) / AUTO_PASS_SECONDS})` }}
+                  />
+                </span>
+              </>
+            )}
           </div>
         </div>
         <div className="claim-actions">
-          <button
-            className={!isChow && claimType === "pong" ? "btn-accent" : "btn-disabled"}
-            disabled={isChow || claimType !== "pong"}
-            onClick={() => onClaim(true)}
-          >
-            Pong <span className="zh">碰</span>
-          </button>
-          <button
-            className={!isChow && claimType === "kong" ? "btn-accent" : "btn-disabled"}
-            disabled={isChow || claimType !== "kong"}
-            onClick={() => onClaim(true)}
-          >
-            Kong <span className="zh">杠</span>
-          </button>
+          {!isChow && (
+            <button className="btn-accent" onClick={() => onClaim(true)}>
+              {verb} <span className="zh">{claimType === "kong" ? "杠" : "碰"}</span>
+            </button>
+          )}
           <button className="btn-ghost" onClick={pass}>
             Pass
+          </button>
+          <button
+            className="btn-coach-ask"
+            onClick={onExplain}
+            disabled={explainLoading || explanation !== null}
+          >
+            師 {explanation ? "Coach has answered" : explainLoading ? "Coach is writing…" : "Ask the coach"}
           </button>
         </div>
         {isChow && chowOptions.length > 0 && (
@@ -115,10 +135,19 @@ export function ClaimPrompt({ view, pending, discarderName, coachLine,
             </div>
           </div>
         )}
-        {coachLine && (
-          <div className="coach-note">
+        {(explanation || explainLoading || coachLine) && (
+          <div className="coach-note" aria-live="polite">
             <span className="coach-badge">師</span>
-            <span className="coach-copy">{coachLine}</span>
+            {explanation ? (
+              <span className="coach-copy">{explanation.text}</span>
+            ) : explainLoading ? (
+              <span className="coach-copy">
+                {coachLine && <>{coachLine}{" "}</>}
+                <span className="coach-writing">Writing the full read…</span>
+              </span>
+            ) : (
+              <span className="coach-copy">{coachLine}</span>
+            )}
           </div>
         )}
       </div>

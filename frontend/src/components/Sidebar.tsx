@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Analysis, DiscardAnalysis, Explanation, GameView } from "../api";
 import { heat } from "../heat";
 import { tileFace } from "../tiles";
@@ -70,19 +70,25 @@ interface SidebarProps {
   displayNames: string[];
   personas: string[];
   paused: boolean;         // not the human's discard turn
-  hintText: string | null;
-  hintOpen: boolean;
-  onToggleHint: () => void;
   onHide: () => void;
   explanation: Explanation | null;
   explainLoading: boolean;
+  interim: string | null;  // engine's instant pick while the LLM writes
   onExplain: () => void;
 }
 
 export function Sidebar({ view, analysis, displayNames, personas, paused,
-                          hintText, hintOpen, onToggleHint, onHide,
-                          explanation, explainLoading, onExplain }: SidebarProps) {
+                          onHide, explanation, explainLoading, interim,
+                          onExplain }: SidebarProps) {
   const [expanded, setExpanded] = useState(0);
+  // The local model's first answer can take ~10s while it loads into
+  // memory. Past 4s, say so — silence reads as "broken".
+  const [slowLoad, setSlowLoad] = useState(false);
+  useEffect(() => {
+    if (!explainLoading) { setSlowLoad(false); return; }
+    const t = window.setTimeout(() => setSlowLoad(true), 4000);
+    return () => window.clearTimeout(t);
+  }, [explainLoading]);
   const shanten = analysis?.shanten ?? null;
   const filled = shanten === null ? 0 : Math.max(0, Math.min(4, 4 - Math.max(shanten, 0)));
   const tenpai = shanten !== null && shanten <= 0;
@@ -158,28 +164,38 @@ export function Sidebar({ view, analysis, displayNames, personas, paused,
           {explanation && (
             <span className="advisor-note-right">
               {explanation.source === "template"
-                ? "offline explanation"
-                : `explained by ${explanation.model || explanation.source}`}
+                ? "engine summary"
+                : `coached by ${explanation.model || explanation.source}`}
             </span>
           )}
         </div>
-        {explanation ? (
-          <div className="coach-note">
-            <p>{explanation.text}</p>
-            {explanation.principles.length > 0 && (
-              <div className="principle-chips">
-                {explanation.principles.map((p) => (
-                  <span key={p} className="principle-chip">{p}</span>
-                ))}
-              </div>
-            )}
-          </div>
-        ) : (
-          <button className="hint-button coach-explain"
-                  onClick={onExplain} disabled={explainLoading}>
-            {explainLoading ? "Thinking…" : "師 Explain this decision"}
-          </button>
-        )}
+        <div aria-live="polite">
+          {explanation ? (
+            <div className="coach-note">
+              <p>{explanation.text}</p>
+              {explanation.principles.length > 0 && (
+                <div className="principle-chips">
+                  {explanation.principles.map((p) => (
+                    <span key={p} className="principle-chip">{p}</span>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : explainLoading ? (
+            <div className="coach-note">
+              {interim && <p className="coach-interim">{interim}</p>}
+              <p className="coach-writing">
+                {slowLoad
+                  ? "Warming up the local model — the first ask takes the longest…"
+                  : "Writing the full read…"}
+              </p>
+            </div>
+          ) : (
+            <button className="hint-button coach-explain" onClick={onExplain}>
+              師 Explain this decision
+            </button>
+          )}
+        </div>
       </section>
 
       <section className="sidebar-section">
@@ -286,24 +302,6 @@ export function Sidebar({ view, analysis, displayNames, personas, paused,
         </div>
       </section>
 
-      <section className="sidebar-section" style={{ borderBottom: "none" }}>
-        <button className="hint-cta" onClick={onToggleHint}>
-          <span className="zh">師</span>
-          {hintOpen ? "Hide the coach's line" : "Show me what you would do"}
-        </button>
-        {hintOpen && hintText && (
-          <div className="hint-panel">
-            <div className="hint-panel-head">
-              <span className="coach-badge">師</span>
-              <span className="hint-panel-label">What I would play</span>
-            </div>
-            <div className="hint-body">{hintText}</div>
-            <div className="hint-footnote">
-              From the hybrid bot's live evaluation of your hand and the table.
-            </div>
-          </div>
-        )}
-      </section>
     </aside>
   );
 }

@@ -32,6 +32,12 @@
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
+:focus-visible {
+  outline: 2px solid var(--accent-500);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
 html, body, #root { height: 100%; }
 
 body {
@@ -446,7 +452,24 @@ button.hand-tile { cursor: default; }
 .claim-titles { flex: 1; }
 .claim-title { font-family: "Newsreader", serif; font-size: 22px; }
 .claim-sub { font-size: 12px; color: var(--on-felt-secondary); margin-top: 4px; }
-.claim-countdown { font-family: "DM Mono", monospace; font-size: 11px; color: var(--text-muted); align-self: flex-start; }
+.claim-countdown {
+  display: flex; flex-direction: column; gap: 5px; align-items: flex-end;
+  align-self: flex-start; min-width: 92px;
+}
+.cd-text { font-family: "DM Mono", monospace; font-size: 11px; color: var(--text-muted); }
+.cd-text.low { color: var(--danger-text); }
+.cd-text.held { color: var(--accent-tint-text-soft); }
+.cd-track {
+  width: 92px; height: 3px; border-radius: 2px;
+  background: rgba(255, 255, 255, 0.08); overflow: hidden;
+}
+.cd-fill {
+  display: block; width: 100%; height: 100%; border-radius: 2px;
+  background: var(--accent-600);
+  transform-origin: left;
+  transition: transform 1s linear, background-color 0.3s ease;
+}
+.cd-fill.low { background: var(--danger-500); }
 .claim-actions { display: flex; gap: 10px; padding: 16px 22px; }
 .claim-actions button {
   flex: 1; padding: 14px; border-radius: 10px; font-size: 14px;
@@ -623,29 +646,28 @@ button.hand-tile { cursor: default; }
 .suit-cell .mini-fill { height: 100%; }
 .threat-tell { font-size: 11px; margin-top: 6px; }
 
-.hint-cta {
-  width: 100%;
-  border: 1px solid rgba(232, 172, 61, 0.45);
-  color: var(--accent-tint-text);
-  background: none;
-  border-radius: 11px; padding: 14px;
-  font-size: 13px;
-  display: flex; align-items: center; justify-content: center; gap: 8px;
+.btn-coach-ask {
+  font-family: "DM Mono", monospace; font-size: 12px;
+  padding: 10px 14px; border-radius: 9px;
+  background: none; border: 1px solid rgba(232, 172, 61, 0.28);
+  color: var(--accent-tint-text-soft); cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
 }
-.hint-cta:hover { background: rgba(232, 172, 61, 0.08); }
-.hint-panel {
-  margin-top: 12px;
-  background: rgba(232, 172, 61, 0.09);
-  border: 1px solid rgba(232, 172, 61, 0.24);
-  border-radius: 12px;
-  padding: 14px;
-  animation: riseIn 0.2s ease;
+.btn-coach-ask:hover:not(:disabled) { background: rgba(232, 172, 61, 0.1); }
+.btn-coach-ask:disabled { opacity: 0.65; cursor: default; }
+.coach-interim { margin: 0 0 8px; color: var(--accent-tint-text); }
+.coach-writing {
+  margin: 0; color: var(--text-secondary); font-size: 13px;
+  animation: coach-pulse 1.4s ease-in-out infinite;
 }
-.hint-panel-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-.hint-panel-head .coach-badge { width: 20px; height: 20px; font-size: 11px; }
-.hint-panel-label { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent-700); }
-.hint-body { font-size: 13px; color: var(--accent-tint-text-soft); line-height: 1.5; }
-.hint-footnote { font-size: 11px; color: #a3947a; margin-top: 8px; }
+@keyframes coach-pulse {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+
+
+
+
 
 /* ── Game end overlay ──────────────────────────────────────────────── */
 
@@ -833,7 +855,9 @@ button.hand-tile { cursor: default; }
 
 @media (prefers-reduced-motion: reduce) {
   .turn-pill.yours, .tile.ring-glow { animation: none; }
-  .claim-card, .kong-banner, .end-card, .setup-card, .hint-panel, .tile-in { animation: none; }
+  .claim-card, .kong-banner, .end-card, .setup-card, .tile-in { animation: none; }
+  .coach-writing { animation: none; opacity: 0.8; }
+  .cd-fill { transition: background-color 0.3s ease; }
 }
 
 /* Screen-reader-only live region */

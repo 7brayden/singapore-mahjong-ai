@@ -36,11 +36,13 @@ export default function App() {
   const [handNumber, setHandNumber] = useState(1);
   const [coachVisible, setCoachVisible] = useState(true);
   const [botBeat, setBotBeat] = useState(false);
-  const [hintText, setHintText] = useState<string | null>(null);
-  const [hintOpen, setHintOpen] = useState(false);
   const [claimCoachLine, setClaimCoachLine] = useState<string | null>(null);
   const [explanation, setExplanation] = useState<Explanation | null>(null);
   const [explainLoading, setExplainLoading] = useState(false);
+  // Instant local recommendation shown while the LLM writes its prose
+  const [coachInterim, setCoachInterim] = useState<string | null>(null);
+  // Guards late responses from a decision the player already left
+  const explainSeq = useRef(0);
   const [setupError, setSetupError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [announcement, setAnnouncement] = useState("");
@@ -90,11 +92,11 @@ export default function App() {
       setGameId(created.game_id);
       setView(created.view);
       setAnalysis(null);
-      setHintOpen(false);
-      setHintText(null);
+      explainSeq.current += 1;
       setClaimCoachLine(null);
       setExplanation(null);
       setExplainLoading(false);
+      setCoachInterim(null);
       setBotBeat(false);
       setPhase("playing");
       socketRef.current = openGameSocket(created.game_id, setView);
@@ -133,11 +135,11 @@ export default function App() {
     if (!gameId) return;
     try {
       const next = await postAction(gameId, answer);
-      setHintOpen(false);
-      setHintText(null);
+      explainSeq.current += 1;
       setClaimCoachLine(null);
       setExplanation(null);
       setExplainLoading(false);
+      setCoachInterim(null);
       if (!next.game_over) {
         setBotBeat(true);
         if (beatTimer.current) window.clearTimeout(beatTimer.current);
@@ -199,27 +201,28 @@ export default function App() {
   }, [view]);
 
   const requestExplanation = useCallback(async () => {
-    if (!gameId || explainLoading) return;
+    if (!gameId || explainLoading || explanation) return;
+    const seq = ++explainSeq.current;
     setExplainLoading(true);
+    // Stage 1 — the engine's own pick, instantly, so the wait has substance
+    getHint(gameId)
+      .then((hint) => {
+        if (explainSeq.current === seq) setCoachInterim(formatHint(hint.suggestion));
+      })
+      .catch(() => undefined);
+    // Stage 2 — the full prose read
     try {
-      setExplanation(await postExplain(gameId));
+      const result = await postExplain(gameId);
+      if (explainSeq.current === seq) setExplanation(result);
     } catch {
       /* no pending decision or server hiccup — button stays available */
     } finally {
-      setExplainLoading(false);
+      if (explainSeq.current === seq) {
+        setExplainLoading(false);
+        setCoachInterim(null);
+      }
     }
-  }, [gameId, explainLoading]);
-
-  const requestHint = useCallback(async () => {
-    if (!gameId) return;
-    try {
-      const hint = await getHint(gameId);
-      setHintText(formatHint(hint.suggestion));
-      setHintOpen(true);
-    } catch {
-      /* no pending decision right now */
-    }
-  }, [gameId, formatHint]);
+  }, [gameId, explainLoading, explanation, formatHint]);
 
   // Coach line for claim prompts (auto-fetched when the window opens)
   useEffect(() => {
@@ -314,6 +317,9 @@ export default function App() {
       {pending && (pending.type === "claim" || pending.type === "chow") && (
         <ClaimPrompt view={view} pending={pending} discarderName={discarderName}
                      coachLine={coachVisible ? claimCoachLine : null}
+                     explanation={coachVisible ? explanation : null}
+                     explainLoading={coachVisible && explainLoading}
+                     onExplain={requestExplanation}
                      onClaim={onClaim} onChow={onChow} />
       )}
       {pending?.type === "kong" && (
@@ -346,7 +352,7 @@ export default function App() {
           heatVisible={coachVisible}
           statusText={yourDiscardTurn ? "Click a tile to discard" : "Bots are playing"}
           onDiscard={onDiscard}
-          onHint={requestHint}
+          onHint={requestExplanation}
           overlay={overlay}
         />
         {coachVisible && (
@@ -356,12 +362,10 @@ export default function App() {
             displayNames={displayNames}
             personas={personaLabels}
             paused={!yourDiscardTurn}
-            hintText={hintText}
-            hintOpen={hintOpen}
-            onToggleHint={() => (hintOpen ? setHintOpen(false) : requestHint())}
             onHide={() => setCoachVisible(false)}
             explanation={explanation}
             explainLoading={explainLoading}
+            interim={coachInterim}
             onExplain={requestExplanation}
           />
         )}

@@ -225,7 +225,7 @@ function HumanArea({ view, chips, yourDiscardTurn, drawnTile, dangerByTile,
           <div className="human-info-right">
             <span className="human-status">{statusText}</span>
             <button className="hint-button" onClick={onHint}>
-              <span className="zh">師</span> Hint
+              <span className="zh">師</span> Explain
             </button>
           </div>
         </div>
