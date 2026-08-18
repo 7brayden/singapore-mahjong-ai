@@ -146,7 +146,11 @@ export interface Explanation {
 export const postExplain = (gameId: string) =>
   request<Explanation>("POST", `/games/${gameId}/explain`);
 
-export function openGameSocket(gameId: string, onView: (view: GameView) => void): WebSocket {
+export function openGameSocket(
+  gameId: string,
+  onView: (view: GameView) => void,
+  onDead?: () => void,
+): WebSocket {
   const wsBase = API_BASE.replace(/^http/, "ws");
   const socket = new WebSocket(`${wsBase}/games/${gameId}/ws`);
   socket.onmessage = (event) => {
@@ -156,5 +160,8 @@ export function openGameSocket(gameId: string, onView: (view: GameView) => void)
       /* ignore malformed frames */
     }
   };
+  // Fires only on unexpected closes — callers null the handler before
+  // closing a socket on purpose (next hand, end session, unmount).
+  socket.onclose = () => onDead?.();
   return socket;
 }

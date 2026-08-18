@@ -74,12 +74,13 @@ interface SidebarProps {
   explanation: Explanation | null;
   explainLoading: boolean;
   interim: string | null;  // engine's instant pick while the LLM writes
+  canExplain: boolean;     // a decision of yours is pending right now
   onExplain: () => void;
 }
 
 export function Sidebar({ view, analysis, displayNames, personas, paused,
                           onHide, explanation, explainLoading, interim,
-                          onExplain }: SidebarProps) {
+                          canExplain, onExplain }: SidebarProps) {
   const [expanded, setExpanded] = useState(0);
   // The local model's first answer can take ~10s while it loads into
   // memory. Past 4s, say so — silence reads as "broken".
@@ -191,8 +192,13 @@ export function Sidebar({ view, analysis, displayNames, personas, paused,
               </p>
             </div>
           ) : (
-            <button className="hint-button coach-explain" onClick={onExplain}>
-              師 Explain this decision
+            <button
+              className="hint-button coach-explain"
+              onClick={onExplain}
+              disabled={!canExplain}
+              title={canExplain ? undefined : "Available when a decision is yours"}
+            >
+              師 {canExplain ? "Explain this decision" : "Waiting for your decision…"}
             </button>
           )}
         </div>

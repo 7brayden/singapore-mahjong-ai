@@ -152,12 +152,14 @@ interface HumanAreaProps {
   recommendedTile: number | null;
   heatVisible: boolean;
   statusText: string;
+  showExplain: boolean;
   onDiscard: (tile: number) => void;
   onHint: () => void;
 }
 
 function HumanArea({ view, chips, yourDiscardTurn, drawnTile, dangerByTile,
-                     recommendedTile, heatVisible, statusText, onDiscard, onHint }: HumanAreaProps) {
+                     recommendedTile, heatVisible, statusText, showExplain,
+                     onDiscard, onHint }: HumanAreaProps) {
   const me = view.players[view.seat];
   // Split the drawn tile out of the sorted hand for the 16px spacer gap.
   let base = [...view.hand];
@@ -225,9 +227,11 @@ function HumanArea({ view, chips, yourDiscardTurn, drawnTile, dangerByTile,
           </div>
           <div className="human-info-right">
             <span className="human-status">{statusText}</span>
-            <button className="hint-button" onClick={onHint}>
-              <span className="zh">師</span> Explain
-            </button>
+            {showExplain && (
+              <button className="hint-button" onClick={onHint}>
+                <span className="zh">師</span> Explain
+              </button>
+            )}
           </div>
         </div>
         <div className={`hand-row${yourDiscardTurn ? " active" : " dimmed"}`}>
@@ -260,6 +264,7 @@ export interface TableProps {
   recommendedTile: number | null;
   heatVisible: boolean;
   statusText: string;
+  showExplain: boolean;
   onDiscard: (tile: number) => void;
   onHint: () => void;
   overlay?: ReactNode;
@@ -318,6 +323,7 @@ export function Table(props: TableProps) {
             recommendedTile={props.recommendedTile}
             heatVisible={props.heatVisible}
             statusText={props.statusText}
+            showExplain={props.showExplain}
             onDiscard={props.onDiscard}
             onHint={props.onHint}
           />

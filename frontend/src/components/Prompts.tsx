@@ -34,6 +34,17 @@ export function ClaimPrompt({ view, pending, discarderName, coachLine,
 
   const pass = () => (isChow ? onChow(null) : onClaim(false));
 
+  // Escape passes — the card is the pending decision, so keyboard
+  // players need a way out that isn't hunting for the ghost button.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") pass();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     const timer = setInterval(() => {
       if (paused.current || coachHold.current) return;
@@ -91,7 +102,7 @@ export function ClaimPrompt({ view, pending, discarderName, coachLine,
         </div>
         <div className="claim-actions">
           {!isChow && (
-            <button className="btn-accent" onClick={() => onClaim(true)}>
+            <button className="btn-accent" autoFocus onClick={() => onClaim(true)}>
               {verb} <span className="zh">{claimType === "kong" ? "杠" : "碰"}</span>
             </button>
           )}
@@ -129,7 +140,7 @@ export function ClaimPrompt({ view, pending, discarderName, coachLine,
               })}
             </div>
             <div className="claim-actions" style={{ padding: "12px 0 0" }}>
-              <button className="btn-accent" onClick={() => onChow(chowOptions[selectedChow])}>
+              <button className="btn-accent" autoFocus onClick={() => onChow(chowOptions[selectedChow])}>
                 Chow the selected run
               </button>
             </div>
@@ -180,13 +191,13 @@ export function KongBanner({ pending, onDeclare, onPass }: KongBannerProps) {
       <span className="kong-texts">
         <div className="kong-title">{title}</div>
         <div className="kong-sub">
-          A kong draws a replacement tile and pays out instantly — free value
-          when the fourth copy serves nothing else.
+          A kong draws a replacement tile from the back of the wall — free
+          value when the fourth copy serves nothing else.
         </div>
       </span>
       <span className="kong-actions">
         {options.map((opt, i) => (
-          <button key={i} className="btn-accent" onClick={() => onDeclare(opt)}>
+          <button key={i} className="btn-accent" autoFocus={i === 0} onClick={() => onDeclare(opt)}>
             Declare Kong{options.length > 1 ? ` (${tileFace(opt[1]).label})` : ""}
           </button>
         ))}

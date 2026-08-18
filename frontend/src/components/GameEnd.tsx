@@ -34,7 +34,7 @@ export function GameEnd({ view, result, displayNames, handNumber,
         result.win_type === "tsumo" ? "self-draw" : "off a discard"}`;
 
   const sub = isDraw
-    ? "The live wall ran out with nobody ready to claim a win. Payments below are instant bonuses only."
+    ? "The live wall ran out with nobody ready to claim a win. No tai are scored on a draw."
     : result.win_type === "tsumo"
       ? `Drew ${winTileFace?.label ?? "the winning tile"} from the wall on turn ${result.turns} · 自摸 pays from all three`
       : `Took ${result.dealt_in_by !== null ? displayNames[result.dealt_in_by] : "a"}${
@@ -117,7 +117,7 @@ export function GameEnd({ view, result, displayNames, handNumber,
           </div>
         </div>
         <div className="end-footer">
-          <button className="btn-accent" onClick={onNextHand}>Next hand</button>
+          <button className="btn-accent" autoFocus onClick={onNextHand}>Next hand</button>
           <button className="btn-ghost" disabled title="Coming soon">
             Review game with coach
           </button>

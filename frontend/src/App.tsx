@@ -46,6 +46,18 @@ export default function App() {
   const [setupError, setSetupError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [announcement, setAnnouncement] = useState("");
+  // Visible error surface — the aria-live region alone is invisible to
+  // sighted players, which made rejected moves look like dead clicks.
+  const [errorToast, setErrorToast] = useState<string | null>(null);
+  const toastTimer = useRef<number | null>(null);
+  const actBusy = useRef(false);
+
+  const showError = useCallback((text: string) => {
+    setErrorToast(text);
+    setAnnouncement(text);
+    if (toastTimer.current) window.clearTimeout(toastTimer.current);
+    toastTimer.current = window.setTimeout(() => setErrorToast(null), 4000);
+  }, []);
 
   const socketRef = useRef<WebSocket | null>(null);
   const ledgerAppliedFor = useRef<string | null>(null);
@@ -87,6 +99,7 @@ export default function App() {
         bots,
         tai_cap: cfg.taiCap,
       });
+      if (socketRef.current) socketRef.current.onclose = null;
       socketRef.current?.close();
       ledgerAppliedFor.current = null;
       setGameId(created.game_id);
@@ -99,7 +112,8 @@ export default function App() {
       setCoachInterim(null);
       setBotBeat(false);
       setPhase("playing");
-      socketRef.current = openGameSocket(created.game_id, setView);
+      socketRef.current = openGameSocket(created.game_id, setView, () =>
+        showError("Live connection dropped — if the table stops updating, refresh."));
     } catch (err) {
       setSetupError(err instanceof Error ? err.message : "Could not reach the game server");
       setPhase("setup");
@@ -123,6 +137,7 @@ export default function App() {
   };
 
   const onEndSession = () => {
+    if (socketRef.current) socketRef.current.onclose = null;
     socketRef.current?.close();
     setPhase("setup");
     setGameId(null);
@@ -132,7 +147,8 @@ export default function App() {
   // ── Actions ──────────────────────────────────────────────────────
 
   const act = useCallback(async (answer: unknown) => {
-    if (!gameId) return;
+    if (!gameId || actBusy.current) return;  // one move at a time
+    actBusy.current = true;
     try {
       const next = await postAction(gameId, answer);
       explainSeq.current += 1;
@@ -147,9 +163,11 @@ export default function App() {
       }
       setView(next);
     } catch (err) {
-      setAnnouncement(err instanceof Error ? err.message : "That move was rejected");
+      showError(err instanceof Error ? err.message : "That move was rejected");
+    } finally {
+      actBusy.current = false;
     }
-  }, [gameId]);
+  }, [gameId, showError]);
 
   const onDiscard = (tile: number) => act(tile);
   const onClaim = (accept: boolean) => act(accept);
@@ -250,7 +268,10 @@ export default function App() {
     setAnnouncement(messages[pending.type] ?? "");
   }, [pendingKey, view]);
 
-  useEffect(() => () => socketRef.current?.close(), []);
+  useEffect(() => () => {
+    if (socketRef.current) socketRef.current.onclose = null;
+    socketRef.current?.close();
+  }, []);
 
   // ── Derived display state ────────────────────────────────────────
 
@@ -351,6 +372,7 @@ export default function App() {
           recommendedTile={coachVisible ? recommendedTile : null}
           heatVisible={coachVisible}
           statusText={yourDiscardTurn ? "Click a tile to discard" : "Bots are playing"}
+          showExplain={coachVisible}
           onDiscard={onDiscard}
           onHint={requestExplanation}
           overlay={overlay}
@@ -366,6 +388,7 @@ export default function App() {
             explanation={explanation}
             explainLoading={explainLoading}
             interim={coachInterim}
+            canExplain={pending != null}
             onExplain={requestExplanation}
           />
         )}
@@ -379,6 +402,9 @@ export default function App() {
           onNextHand={() => { applyLedgerAndAdvance(); onNextHand(); }}
           onEndSession={() => { applyLedgerAndAdvance(); onEndSession(); }}
         />
+      )}
+      {errorToast && (
+        <div className="toast" role="status">{errorToast}</div>
       )}
       <div className="sr-only" aria-live="polite">{announcement}</div>
     </div>
