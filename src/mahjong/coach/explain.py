@@ -40,6 +40,7 @@ from mahjong.tiles import (
 from mahjong.opponent_model import estimate_opponent_threats
 from mahjong.server.analysis import analyze_seat
 from mahjong.coach.retrieve import retrieve
+from mahjong.ml.features import _bonus_tai
 
 # Azure addresses a *deployment you named*, not a public model id.
 DEFAULT_AZURE_API_VERSION = "2024-10-21"
@@ -50,10 +51,53 @@ SYSTEM_PROMPT = """You are the table coach for a Singapore mahjong training app.
 
 House rules at this table (already reflected in the numbers): tai cap 6, minimum 1 tai to win (no chicken hands), self-draw adds no tai (it only makes all three opponents pay), shooter pays all three shares on a ron, ping hu 4 tai only with zero bonus tiles (with any flower/animal it is chou ping hu, 1 tai; +1 if concealed), each seat flower or animal 1 tai, all four animals +1.
 
+The situation's tai_context lines come from the scoring engine and are authoritative for THIS hand: they state which tai tracks are live, degraded, or dead right now. Never advise pursuing a track tai_context marks unavailable — in particular, if it says ping hu is degraded to chou ping hu, do not present ping hu (4 tai) as this hand's goal.
+
 Reply in at most 110 words of plain second-person prose. No headers, no lists. Weave in at most two numbers from the situation. End with: Principle: <the one retrieved principle title that best fits>."""
 
 
 # ── Situation building (engine numbers only) ─────────────────────────
+
+def _tai_context(hand, seat_index: int) -> List[str]:
+    """Authoritative per-hand scoring facts, stated by the engine.
+
+    Exists because of an observed coaching failure: with a flower in
+    hand the LLM kept presenting ping hu (4 tai) as the goal, even
+    though this table degrades any all-chows hand holding bonus tiles
+    to chou ping hu (1 tai). The connection between has_bonus_tiles and
+    the ping hu track is exactly the kind of inference a small model
+    fumbles — so the engine states it outright instead of hoping.
+    """
+    notes = []
+    flowers = hand.flowers
+    has_pong_meld = any(kind != "chow" for kind, _ in hand.exposed)
+    concealed = hand.num_exposed_melds == 0
+
+    if flowers:
+        banked = _bonus_tai(flowers, seat_index)
+        notes.append(
+            f"You hold {len(flowers)} bonus tile(s) banking {banked} tai. "
+            "Ping hu (4 tai) and 无花 (1 tai) are OFF the table this hand: "
+            "an all-chows hand now scores chou ping hu (1 tai"
+            + (", +1 while concealed" if concealed else "") + ").")
+    if has_pong_meld:
+        notes.append(
+            "An exposed pong/kong means this hand can never be all chows — "
+            "the ping hu / chou ping hu track is dead; value must come from "
+            "triplets, flush, honors, or bonus tiles.")
+    elif not flowers:
+        if concealed:
+            notes.append(
+                "Clean concealed ping hu (4 tai, +1 concealed) is still "
+                "live — it dies the moment you draw any flower/animal or "
+                "claim a meld.")
+        else:
+            notes.append(
+                "Clean ping hu (4 tai) is still live but the concealed +1 "
+                "is already spent; drawing any flower/animal drops it to "
+                "chou ping hu (1 tai).")
+    return notes
+
 
 def build_situation(game, seat: int, pending: Optional[Dict],
                     suggestion_text: Optional[str]) -> Dict:
@@ -104,6 +148,7 @@ def build_situation(game, seat: int, pending: Optional[Dict],
         "turn": game.turn,
         "tiles_remaining": game.tiles_remaining,
         # derived flags (retrieval + prompt context)
+        "tai_context": _tai_context(hand, game.seat_index(seat)),
         "is_concealed": hand.num_exposed_melds == 0,
         "has_bonus_tiles": bool(hand.flowers),
         "flush_track": total > 0 and (biggest + honors) / total >= 0.7,
@@ -144,6 +189,9 @@ def fallback_text(situation: Dict, principles: List[Dict]) -> str:
         if risky is not best and (risky.get("deal_in_prob") or 0) >= 0.03:
             parts.append(f"Watch {risky['discard']}: "
                          f"{100 * risky['deal_in_prob']:.1f}% deal-in risk.")
+    tai_notes = situation.get("tai_context") or []
+    if tai_notes:
+        parts.append(tai_notes[0])
     if situation.get("shanten") == 0 and situation.get("waiting_on"):
         parts.append("Waiting on: " + ", ".join(situation["waiting_on"]) + ".")
     if principles:
@@ -243,16 +291,24 @@ async def _chat_text(client, model: str, prompt: str) -> str:
     """
     messages = [{"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": prompt}]
-    try:
-        resp = await client.chat.completions.create(
-            model=model, messages=messages, max_tokens=MAX_OUTPUT_TOKENS)
-    except Exception as exc:
-        if "max_completion_tokens" not in str(exc):
-            raise
-        resp = await client.chat.completions.create(
-            model=model, messages=messages,
-            max_completion_tokens=MAX_OUTPUT_TOKENS)
-    return (resp.choices[0].message.content or "").strip()
+    # Low temperature on purpose: the coach narrates numbers the engine
+    # already computed. Sampling variety only invites embellishment.
+    kwargs = {"model": model, "messages": messages,
+              "max_tokens": MAX_OUTPUT_TOKENS, "temperature": 0.2}
+    for _ in range(3):
+        try:
+            resp = await client.chat.completions.create(**kwargs)
+            return (resp.choices[0].message.content or "").strip()
+        except Exception as exc:
+            text = str(exc)
+            if "max_completion_tokens" in text and "max_tokens" in kwargs:
+                kwargs["max_completion_tokens"] = kwargs.pop("max_tokens")
+            elif "temperature" in text and "temperature" in kwargs:
+                # Reasoning-family models reject non-default temperature.
+                kwargs.pop("temperature")
+            else:
+                raise
+    raise RuntimeError("chat completion failed after parameter fallbacks")
 
 
 async def _openai_text(prompt: str) -> str:

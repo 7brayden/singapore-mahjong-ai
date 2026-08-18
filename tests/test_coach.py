@@ -203,3 +203,58 @@ def test_generic_client_tolerates_a_keyless_local_server(monkeypatch):
     client = openai_compatible_client()
     assert str(client.base_url).rstrip("/").endswith("/v1")
     assert client.api_key  # never empty
+
+
+# ── tai_context: the engine states which scoring tracks are live ─────
+#
+# Regression for an observed coaching failure: with a flower in hand,
+# the LLM kept recommending ping hu (4 tai) even though this table
+# degrades an all-chows hand holding bonus tiles to chou ping hu
+# (1 tai). The engine now states the track status outright.
+
+def _ctx_game(seed=2):
+    game = GameState([GreedyAgent(f"G{i}") for i in range(4)], seed=seed)
+    game.setup()
+    return game
+
+
+def test_tai_context_marks_ping_hu_degraded_when_holding_bonus():
+    from mahjong.coach.explain import _tai_context
+    game = _ctx_game()
+    hand = game.hands[0]
+    hand.flowers.clear()
+    hand.flowers.append(42)  # an animal
+    notes = " ".join(_tai_context(hand, game.seat_index(0)))
+    assert "chou ping hu" in notes
+    assert "OFF the table" in notes
+
+
+def test_tai_context_says_clean_concealed_ping_hu_is_live():
+    from mahjong.coach.explain import _tai_context
+    game = _ctx_game()
+    hand = game.hands[0]
+    hand.flowers.clear()
+    notes = " ".join(_tai_context(hand, game.seat_index(0)))
+    assert "still live" in notes
+    assert "OFF the table" not in notes
+
+
+def test_tai_context_kills_the_track_on_an_exposed_pong():
+    from mahjong.coach.explain import _tai_context
+    game = _ctx_game()
+    hand = game.hands[0]
+    hand.flowers.clear()
+    hand.add_exposed_meld("pong", [9, 9, 9])
+    notes = " ".join(_tai_context(hand, game.seat_index(0)))
+    assert "never be all chows" in notes
+
+
+def test_situation_and_fallback_carry_the_tai_context():
+    game = _ctx_game()
+    game.hands[0].flowers.append(42)
+    game._deal_tile_to(0)
+    situation = build_situation(game, 0, {"type": "discard"},
+                                "The trained advisor would discard 5 Wan.")
+    assert any("chou ping hu" in n for n in situation["tai_context"])
+    text = fallback_text(situation, retrieve(situation))
+    assert "chou ping hu" in text
