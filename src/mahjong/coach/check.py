@@ -17,6 +17,7 @@ import sys
 
 from mahjong.coach.explain import (
     DEFAULT_ANTHROPIC_MODEL, DEFAULT_AZURE_API_VERSION, _provider,
+    azure_client,
 )
 
 AZURE_VARS = ["AZURE_OPENAI_ENDPOINT", "AZURE_OPENAI_API_KEY",
@@ -37,21 +38,14 @@ def _show(name: str) -> str:
 
 
 async def _probe_azure() -> str:
-    from openai import AsyncAzureOpenAI
-
     missing = [v for v in ("AZURE_OPENAI_ENDPOINT", "AZURE_OPENAI_API_KEY",
                            "AZURE_OPENAI_DEPLOYMENT")
                if not os.environ.get(v, "").strip()]
     if missing:
         raise RuntimeError(f"missing required variables: {', '.join(missing)}")
 
-    client = AsyncAzureOpenAI(
-        azure_endpoint=os.environ["AZURE_OPENAI_ENDPOINT"].strip(),
-        api_key=os.environ["AZURE_OPENAI_API_KEY"].strip(),
-        api_version=os.environ.get("AZURE_OPENAI_API_VERSION",
-                                   DEFAULT_AZURE_API_VERSION).strip(),
-        timeout=25.0,
-    )
+    client, surface = azure_client()
+    print(f"  endpoint surface           {surface}")
     deployment = os.environ["AZURE_OPENAI_DEPLOYMENT"].strip()
     try:
         resp = await client.chat.completions.create(
@@ -104,9 +98,19 @@ def _explain_failure(provider: str, exc: Exception) -> str:
         if "429" in text:
             return ("429 — rate/quota limit. Raise the deployment's "
                     "tokens-per-minute in Azure, or wait and retry.")
-        if "connect" in lowered or "timeout" in lowered:
-            return ("Network — check AZURE_OPENAI_ENDPOINT is the full "
-                    "https://<resource>.openai.azure.com URL and reachable.")
+        if ("connect" in lowered or "timeout" in lowered
+                or "name or service not known" in lowered
+                or "nodename nor servname" in lowered):
+            return (
+                "The endpoint host did not resolve or could not be reached.\n"
+                "Check in this order:\n"
+                "  1. Does the resource still exist? Azure lab sandboxes\n"
+                "     (hostnames like odl-user-1234567-...) are deleted when\n"
+                "     the lab ends, taking their DNS record with them. A key\n"
+                "     from an expired lab looks valid and resolves to nothing.\n"
+                "  2. Is AZURE_OPENAI_ENDPOINT copied whole, including https://?\n"
+                "  3. Resolve it yourself:  nslookup <host>\n"
+                "     NXDOMAIN means the resource is gone, not misconfigured.")
     if provider == "anthropic" and ("401" in text or "authentication" in lowered):
         return "401 — check ANTHROPIC_API_KEY."
     return "See the error above."

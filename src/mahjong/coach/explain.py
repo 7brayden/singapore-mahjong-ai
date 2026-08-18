@@ -171,25 +171,53 @@ def _build_prompt(situation: Dict, principles: List[Dict]) -> str:
         "\n".join(f"- {c['title']}: {c['text']}" for c in principles))
 
 
+def azure_client():
+    """Build a client for whichever Azure surface the endpoint names.
+
+    Azure ships two, and the URL says which:
+
+      classic    https://<resource>.openai.azure.com
+                 deployment-addressed, needs an api-version
+      v1 compat  https://<resource>.services.ai.azure.com/openai/v1
+                 OpenAI-compatible, plain client, no api-version
+
+    Newer Azure AI Foundry resources hand out the second shape, so the
+    same credentials that work in one portal fail in the other unless
+    the client is chosen from the URL. Returns (client, surface).
+    """
+    endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT", "").strip().rstrip("/")
+    key = os.environ.get("AZURE_OPENAI_API_KEY", "").strip()
+    if not endpoint or not key:
+        raise RuntimeError(
+            "AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_API_KEY are both required")
+
+    if endpoint.endswith("/openai/v1") or ".services.ai.azure.com" in endpoint:
+        from openai import AsyncOpenAI  # lazy: optional dependency
+        base = (endpoint if endpoint.endswith("/openai/v1")
+                else f"{endpoint}/openai/v1")
+        return AsyncOpenAI(base_url=base, api_key=key, timeout=25.0), "v1"
+
+    from openai import AsyncAzureOpenAI  # lazy: optional dependency
+    return AsyncAzureOpenAI(
+        azure_endpoint=endpoint,
+        api_key=key,
+        api_version=os.environ.get("AZURE_OPENAI_API_VERSION",
+                                   DEFAULT_AZURE_API_VERSION).strip(),
+        timeout=25.0,
+    ), "classic"
+
+
 async def _azure_text(prompt: str) -> str:
     """Azure OpenAI chat completions.
 
     `model` here is the DEPLOYMENT NAME you chose in the Azure portal,
     not a public model id — the most common source of 404s.
     """
-    from openai import AsyncAzureOpenAI  # lazy: optional dependency
-
     deployment = os.environ.get("AZURE_OPENAI_DEPLOYMENT", "").strip()
     if not deployment:
         raise RuntimeError("AZURE_OPENAI_DEPLOYMENT is not set")
 
-    client = AsyncAzureOpenAI(
-        azure_endpoint=os.environ["AZURE_OPENAI_ENDPOINT"].strip(),
-        api_key=os.environ["AZURE_OPENAI_API_KEY"].strip(),
-        api_version=os.environ.get("AZURE_OPENAI_API_VERSION",
-                                   DEFAULT_AZURE_API_VERSION).strip(),
-        timeout=25.0,
-    )
+    client, _surface = azure_client()
     messages = [{"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": prompt}]
     try:
