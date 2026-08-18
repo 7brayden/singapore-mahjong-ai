@@ -280,7 +280,7 @@ export function Sidebar({ view, analysis, displayNames, personas, paused,
                   <span className="threat-pct" style={{ color }}>{pct}%</span>
                 </div>
                 <div className="threat-bar">
-                  <span className="fill" style={{ width: `${pct}%`, background: color }} />
+                  <span className="fill" style={{ transform: `scaleX(${opp.threat})`, background: color }} />
                 </div>
                 <div className="suit-strip">
                   {SUIT_ORDER.map(([key, glyph]) => (
@@ -289,7 +289,7 @@ export function Sidebar({ view, analysis, displayNames, personas, paused,
                       <span className="mini-bar">
                         <span
                           className="mini-fill"
-                          style={{ width: `${suitValue(key) * 100}%`, background: heat(suitValue(key)) }}
+                          style={{ transform: `scaleX(${suitValue(key)})`, background: heat(suitValue(key)) }}
                         />
                       </span>
                     </span>

@@ -316,7 +316,10 @@ button:focus-visible, input:focus-visible {
 .wall-count { font-family: "DM Mono", monospace; font-size: 30px; color: #f4efe1; line-height: 1; }
 .wall-caption { font-size: 11px; color: var(--on-felt-secondary-2); }
 .wall-bar { width: 100%; height: 4px; border-radius: 999px; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
-.wall-bar .fill { height: 100%; background: var(--safe-500); border-radius: 999px; }
+.wall-bar .fill {
+  width: 100%; height: 100%; background: var(--safe-500); border-radius: 999px;
+  transform-origin: left; transition: transform 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+}
 .round-row { display: flex; align-items: center; gap: 8px; width: 100%; }
 .round-glyph {
   width: 30px; height: 30px; border-radius: 7px;
@@ -570,9 +573,18 @@ button.hand-tile { cursor: default; }
 .progress-sub { font-size: 12px; color: var(--text-secondary); margin-top: 6px; line-height: 1.5; }
 .shanten-meter { display: flex; gap: 5px; margin-top: 14px; }
 .shanten-seg { flex: 1; }
-.shanten-seg .bar { height: 6px; border-radius: 999px; background: rgba(255, 255, 255, 0.08); }
-.shanten-seg.filled .bar { background: var(--accent-500); }
-.shanten-seg.filled.tenpai-fill .bar { background: var(--safe-500); }
+.shanten-seg .bar {
+  position: relative; display: block; height: 6px; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08); overflow: hidden;
+}
+.shanten-seg .bar::after {
+  content: ""; position: absolute; inset: 0; border-radius: 999px;
+  background: var(--accent-500);
+  transform: scaleX(0); transform-origin: left;
+  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.3s ease;
+}
+.shanten-seg.filled .bar::after { transform: scaleX(1); }
+.shanten-seg.filled.tenpai-fill .bar::after { background: var(--safe-500); }
 .shanten-seg.leading .bar { box-shadow: 0 0 12px rgba(232, 172, 61, 0.5); }
 .shanten-seg .seg-label { font-size: 9.5px; text-align: center; margin-top: 5px; color: #5f7178; }
 .shanten-seg.filled .seg-label { color: var(--accent-tint-text-soft); }
@@ -638,12 +650,20 @@ button.hand-tile { cursor: default; }
 .threat-persona { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
 .threat-pct { font-family: "DM Mono", monospace; font-size: 13px; }
 .threat-bar { height: 7px; border-radius: 999px; background: rgba(255, 255, 255, 0.07); margin-top: 7px; overflow: hidden; }
-.threat-bar .fill { height: 100%; border-radius: 999px; }
+.threat-bar .fill {
+  display: block; width: 100%; height: 100%; border-radius: 999px;
+  transform-origin: left;
+  transition: transform 0.45s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.3s ease;
+}
 .suit-strip { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
 .suit-cell { display: flex; align-items: center; gap: 4px; }
 .suit-cell .suit-label { font-size: 10px; color: var(--text-label); font-family: "Noto Sans SC", sans-serif; }
 .suit-cell .mini-bar { width: 22px; height: 4px; border-radius: 999px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
-.suit-cell .mini-fill { height: 100%; }
+.suit-cell .mini-fill {
+  display: block; width: 100%; height: 100%; border-radius: 999px;
+  transform-origin: left;
+  transition: transform 0.45s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.3s ease;
+}
 .threat-tell { font-size: 11px; margin-top: 6px; }
 
 .btn-coach-ask {
@@ -843,6 +863,21 @@ button.hand-tile { cursor: default; }
   50% { box-shadow: 0 0 0 8px rgba(217, 154, 43, 0); }
 }
 @keyframes softGlow { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
+.tile-land { animation: tileLand 0.26s cubic-bezier(0.16, 1, 0.3, 1); }
+@keyframes tileLand {
+  from { transform: translateY(-8px) scale(1.08); opacity: 0.4; }
+  60% { transform: translateY(1px) scale(0.99); opacity: 1; }
+  to { transform: none; }
+}
+
+/* The earned beat: reaching 听牌 flares once, then rests */
+.progress-headline.tenpai { animation: tenpaiFlare 0.7s cubic-bezier(0.16, 1, 0.3, 1); }
+@keyframes tenpaiFlare {
+  0% { text-shadow: 0 0 0 rgba(143, 211, 162, 0); }
+  35% { text-shadow: 0 0 24px rgba(143, 211, 162, 0.6); }
+  100% { text-shadow: 0 0 0 rgba(143, 211, 162, 0); }
+}
+
 @keyframes tileIn {
   from { transform: translateY(-14px) scale(0.94); opacity: 0; }
   to { transform: none; opacity: 1; }
@@ -856,6 +891,10 @@ button.hand-tile { cursor: default; }
 @media (prefers-reduced-motion: reduce) {
   .turn-pill.yours, .tile.ring-glow { animation: none; }
   .claim-card, .kong-banner, .end-card, .setup-card, .tile-in { animation: none; }
+  .tile-land, .progress-headline.tenpai { animation: none; }
+  .wall-bar .fill, .threat-bar .fill, .mini-fill, .shanten-seg .bar::after {
+    transition: background-color 0.3s ease;
+  }
   .coach-writing { animation: none; opacity: 0.8; }
   .cd-fill { transition: background-color 0.3s ease; }
 }

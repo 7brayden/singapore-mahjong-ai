@@ -14,11 +14,13 @@ interface TileProps {
   highlightFace?: boolean;
   danger?: number;       // 0-1; renders the heat strip when provided
   heatOff?: boolean;     // strip present but neutral
+  entrance?: "land";     // one-shot mount animation (newest river tile)
 }
 
-export function TileView({ id, size, ring, riverFace, highlightFace, danger, heatOff }: TileProps) {
+export function TileView({ id, size, ring, riverFace, highlightFace, danger, heatOff, entrance }: TileProps) {
   const face = tileFace(id);
   const classes = ["tile", `size-${size}`];
+  if (entrance === "land") classes.push("tile-land");
   if (ring) classes.push(ring);
   if (riverFace) classes.push("river-face");
   if (highlightFace) classes.push("highlight-face");

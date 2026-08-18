@@ -96,6 +96,7 @@ function DiscardRiver({ player, position, claimTile }: {
             id={t}
             size="river"
             riverFace
+            entrance={isLast ? "land" : undefined}
             ring={isClaimed ? "ring-glow" : isLast ? "ring-soft" : undefined}
           />
         );
@@ -118,7 +119,7 @@ function CenterPod({ view, pillLabel, yourTurn, thinking, dealerName }: CenterPo
       <div className="wall-count">{view.tiles_remaining}</div>
       <div className="wall-caption">tiles left</div>
       <div className="wall-bar">
-        <div className="fill" style={{ width: `${(view.tiles_remaining / 148) * 100}%` }} />
+        <div className="fill" style={{ transform: `scaleX(${view.tiles_remaining / 148})` }} />
       </div>
       <div className="round-row">
         <span className="round-glyph">{seatChar(view.prevailing_wind)}</span>
