@@ -17,9 +17,10 @@ import sys
 
 from mahjong.coach.explain import (
     DEFAULT_ANTHROPIC_MODEL, DEFAULT_AZURE_API_VERSION, _provider,
-    azure_client,
+    azure_client, openai_compatible_client,
 )
 
+GENERIC_VARS = ["COACH_BASE_URL", "COACH_API_KEY", "COACH_MODEL"]
 AZURE_VARS = ["AZURE_OPENAI_ENDPOINT", "AZURE_OPENAI_API_KEY",
               "AZURE_OPENAI_DEPLOYMENT", "AZURE_OPENAI_API_VERSION"]
 ANTHROPIC_VARS = ["ANTHROPIC_API_KEY", "COACH_MODEL"]
@@ -35,6 +36,16 @@ def _show(name: str) -> str:
     if "KEY" in name:
         return f"  {name:<26} set, {len(value)} chars, ends …{value[-4:]}"
     return f"  {name:<26} {value}"
+
+
+async def _probe_openai() -> str:
+    model = os.environ.get("COACH_MODEL", "").strip()
+    if not model:
+        raise RuntimeError("COACH_MODEL is not set (the model this endpoint serves)")
+    client = openai_compatible_client()
+    resp = await client.chat.completions.create(
+        model=model, messages=[{"role": "user", "content": PROBE}], max_tokens=16)
+    return (resp.choices[0].message.content or "").strip()
 
 
 async def _probe_azure() -> str:
@@ -83,6 +94,18 @@ def _explain_failure(provider: str, exc: Exception) -> str:
         extra = "coach" if provider == "azure" else "coach-anthropic"
         return (f"The SDK isn't installed. Run:\n"
                 f'    pip install -e ".[server,{extra}]"')
+    if provider == "openai":
+        if "404" in text or "not found" in lowered:
+            return ("404 — COACH_BASE_URL or COACH_MODEL is wrong. The base "
+                    "URL usually ends in /v1, and the model must be one this "
+                    "endpoint actually serves.")
+        if "401" in text or "unauthorized" in lowered:
+            return "401 — check COACH_API_KEY for this endpoint."
+        if "connect" in lowered or "timeout" in lowered:
+            return ("Could not reach COACH_BASE_URL. If it is a local server "
+                    "(Ollama, LM Studio), make sure it is running — and note "
+                    "that from inside Docker, localhost is the container: use "
+                    "http://host.docker.internal:11434/v1 instead.")
     if provider == "azure":
         if "404" in text or "not found" in lowered:
             return ("404 — almost always AZURE_OPENAI_DEPLOYMENT holding a "
@@ -125,6 +148,10 @@ def main() -> int:
     print(f"  selected provider          {provider}"
           f"{'  (pinned by COACH_PROVIDER)' if pinned else ''}")
     print()
+    print("OpenAI-compatible endpoint (COACH_BASE_URL)")
+    for v in GENERIC_VARS:
+        print(_show(v))
+    print()
     print("Azure OpenAI")
     for v in AZURE_VARS:
         print(_show(v))
@@ -144,8 +171,13 @@ def main() -> int:
 
     print(f"Calling {provider}…")
     try:
-        reply = asyncio.run(
-            _probe_azure() if provider == "azure" else _probe_anthropic())
+        probe = {"openai": _probe_openai, "azure": _probe_azure,
+                 "anthropic": _probe_anthropic}.get(provider)
+        if probe is None:
+            raise RuntimeError(
+                f"unknown COACH_PROVIDER {provider!r} — "
+                "use openai, azure, anthropic, or template")
+        reply = asyncio.run(probe())
     except Exception as exc:
         print(f"\n  FAILED: {type(exc).__name__}: {exc}\n")
         print(_explain_failure(provider, exc))

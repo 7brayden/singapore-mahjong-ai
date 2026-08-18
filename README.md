@@ -438,9 +438,27 @@ Selected from the environment; the first configured credential wins, and
 
 | Provider | Environment |
 |---|---|
+| **OpenAI-compatible** | `COACH_BASE_URL`, `COACH_MODEL`, optional `COACH_API_KEY` |
 | **Azure OpenAI** | `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_DEPLOYMENT`, optional `AZURE_OPENAI_API_VERSION` |
 | **Anthropic** | `ANTHROPIC_API_KEY`, optional `COACH_MODEL` (default `claude-opus-5`) |
 | **Template** | none — always available |
+
+The generic `openai` provider takes any endpoint speaking the OpenAI
+chat-completions API — OpenAI itself, Ollama, LM Studio, vLLM, OpenRouter, a
+gateway. It exists because vendors disappear: an Azure lab sandbox was deleted
+with its DNS record, and GitHub Models entered retirement, within a week of
+each other. Which endpoint answers is configuration, not code.
+
+```
+# OpenAI
+COACH_BASE_URL=https://api.openai.com/v1
+COACH_API_KEY=sk-...
+COACH_MODEL=gpt-4o-mini
+
+# Ollama on your own machine (free, no key)
+COACH_BASE_URL=http://localhost:11434/v1     # host.docker.internal from Docker
+COACH_MODEL=llama3.2
+```
 
 `AZURE_OPENAI_DEPLOYMENT` is the deployment *name you chose in the Azure
 portal*, not a public model id; using a model id there is the usual cause of

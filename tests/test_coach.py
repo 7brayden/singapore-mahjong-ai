@@ -20,7 +20,7 @@ from mahjong.server.app import app, manager
 
 
 COACH_ENV_VARS = [
-    "COACH_PROVIDER", "COACH_MODEL",
+    "COACH_PROVIDER", "COACH_MODEL", "COACH_BASE_URL", "COACH_API_KEY",
     "ANTHROPIC_API_KEY",
     "AZURE_OPENAI_API_KEY", "AZURE_OPENAI_ENDPOINT",
     "AZURE_OPENAI_DEPLOYMENT", "AZURE_OPENAI_API_VERSION",
@@ -189,3 +189,17 @@ def test_check_never_prints_a_whole_key(monkeypatch, capsys):
     out = capsys.readouterr().out
     assert secret not in out
     assert "9999" in out  # last 4 shown, enough to tell keys apart
+
+
+def test_base_url_selects_the_generic_openai_provider(monkeypatch):
+    monkeypatch.setenv("COACH_BASE_URL", "http://localhost:11434/v1")
+    assert _provider() == "openai"
+
+
+def test_generic_client_tolerates_a_keyless_local_server(monkeypatch):
+    # Local servers ignore the key; the SDK still requires a non-empty one.
+    from mahjong.coach.explain import openai_compatible_client
+    monkeypatch.setenv("COACH_BASE_URL", "http://localhost:11434/v1")
+    client = openai_compatible_client()
+    assert str(client.base_url).rstrip("/").endswith("/v1")
+    assert client.api_key  # never empty

@@ -6,20 +6,27 @@ system prompt forbids inventing numbers; the recommendation it explains
 is the learned agent's, computed by the engine before the LLM is ever
 involved.
 
-Three backends, selected from the environment by _provider():
+Four backends, selected from the environment by _provider():
 
-    azure      Azure OpenAI chat completions (deployment-addressed)
+    openai     any OpenAI-compatible endpoint named by COACH_BASE_URL —
+               OpenAI, Ollama, LM Studio, vLLM, OpenRouter, a gateway
+    azure      Azure OpenAI (deployment-addressed; both endpoint shapes)
     anthropic  Anthropic Messages API via the official SDK
     template   deterministic prose over the same numbers
 
+The generic `openai` provider exists because vendors disappear: an
+Azure lab sandbox was deleted along with its DNS record, and GitHub
+Models entered retirement, both within a week of each other. Which
+endpoint answers is configuration, not code.
+
 The template is not an error path — with no credentials, or on any API
 failure, the coach degrades to "less fluent", never to "wrong" or
-"broken". Provider SDKs are imported lazily, so neither is a hard
+"broken". Provider SDKs are imported lazily, so none is a hard
 dependency of the server.
 
 Credentials are read server-side from the environment at call time and
 never leave this process; the browser only ever receives rendered text.
-For a future multi-user deployment, the two _*_text functions are the
+For a future multi-user deployment, the _*_text functions are the
 single place to swap in per-user billing.
 """
 
@@ -150,18 +157,38 @@ def fallback_text(situation: Dict, principles: List[Dict]) -> str:
 def _provider() -> str:
     """Which backend to use, decided from the environment.
 
-    COACH_PROVIDER pins it explicitly (azure | anthropic | template);
-    otherwise the first configured credential wins, and "template" is
-    the always-available floor.
+    COACH_PROVIDER pins it explicitly (openai | azure | anthropic |
+    template); otherwise the first configured credential wins, and
+    "template" is the always-available floor.
     """
     pinned = os.environ.get("COACH_PROVIDER", "").strip().lower()
     if pinned:
         return pinned
+    if os.environ.get("COACH_BASE_URL", "").strip():
+        return "openai"
     if os.environ.get("AZURE_OPENAI_API_KEY", "").strip():
         return "azure"
     if os.environ.get("ANTHROPIC_API_KEY", "").strip():
         return "anthropic"
     return "template"
+
+
+def openai_compatible_client():
+    """Client for any endpoint speaking the OpenAI chat-completions API.
+
+    Deliberately vendor-neutral. Two backends have already died under
+    this project — an Azure lab sandbox deleted with its DNS record, and
+    GitHub Models entering retirement — so the endpoint is configuration,
+    not code. Point COACH_BASE_URL at OpenAI, Ollama, LM Studio, vLLM,
+    OpenRouter, or a gateway; nothing here needs to change.
+    """
+    base = os.environ.get("COACH_BASE_URL", "").strip().rstrip("/")
+    if not base:
+        raise RuntimeError("COACH_BASE_URL is not set")
+    # Local servers ignore the key, but the SDK insists on a non-empty one.
+    key = os.environ.get("COACH_API_KEY", "").strip() or "not-needed"
+    from openai import AsyncOpenAI  # lazy: optional dependency
+    return AsyncOpenAI(base_url=base, api_key=key, timeout=25.0)
 
 
 def _build_prompt(situation: Dict, principles: List[Dict]) -> str:
@@ -207,6 +234,35 @@ def azure_client():
     ), "classic"
 
 
+async def _chat_text(client, model: str, prompt: str) -> str:
+    """One OpenAI-compatible chat completion.
+
+    Reasoning-family models reject max_tokens and demand
+    max_completion_tokens; the error is confusing enough to be worth
+    retrying rather than surfacing as a dead coach.
+    """
+    messages = [{"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": prompt}]
+    try:
+        resp = await client.chat.completions.create(
+            model=model, messages=messages, max_tokens=MAX_OUTPUT_TOKENS)
+    except Exception as exc:
+        if "max_completion_tokens" not in str(exc):
+            raise
+        resp = await client.chat.completions.create(
+            model=model, messages=messages,
+            max_completion_tokens=MAX_OUTPUT_TOKENS)
+    return (resp.choices[0].message.content or "").strip()
+
+
+async def _openai_text(prompt: str) -> str:
+    """Any OpenAI-compatible endpoint named by COACH_BASE_URL."""
+    model = os.environ.get("COACH_MODEL", "").strip()
+    if not model:
+        raise RuntimeError("COACH_MODEL is not set (the model this endpoint serves)")
+    return await _chat_text(openai_compatible_client(), model, prompt)
+
+
 async def _azure_text(prompt: str) -> str:
     """Azure OpenAI chat completions.
 
@@ -216,24 +272,8 @@ async def _azure_text(prompt: str) -> str:
     deployment = os.environ.get("AZURE_OPENAI_DEPLOYMENT", "").strip()
     if not deployment:
         raise RuntimeError("AZURE_OPENAI_DEPLOYMENT is not set")
-
     client, _surface = azure_client()
-    messages = [{"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": prompt}]
-    try:
-        resp = await client.chat.completions.create(
-            model=deployment, messages=messages,
-            max_tokens=MAX_OUTPUT_TOKENS)
-    except Exception as exc:
-        # Reasoning-family deployments reject max_tokens and demand
-        # max_completion_tokens. The error is confusing enough that it
-        # is worth retrying rather than surfacing as a dead coach.
-        if "max_completion_tokens" not in str(exc):
-            raise
-        resp = await client.chat.completions.create(
-            model=deployment, messages=messages,
-            max_completion_tokens=MAX_OUTPUT_TOKENS)
-    return (resp.choices[0].message.content or "").strip()
+    return await _chat_text(client, deployment, prompt)
 
 
 async def _anthropic_text(prompt: str) -> str:
@@ -276,13 +316,15 @@ async def explain_situation(game, seat: int, pending: Optional[Dict],
     }
 
     provider = _provider()
-    if provider in ("azure", "anthropic"):
+    if provider in ("openai", "azure", "anthropic"):
         try:
             prompt = _build_prompt(situation, principles)
-            if provider == "azure":
+            if provider == "openai":
+                payload["text"] = await _openai_text(prompt)
+                payload["model"] = os.environ.get("COACH_MODEL", "")
+            elif provider == "azure":
                 payload["text"] = await _azure_text(prompt)
-                payload["model"] = os.environ.get(
-                    "AZURE_OPENAI_DEPLOYMENT", "")
+                payload["model"] = os.environ.get("AZURE_OPENAI_DEPLOYMENT", "")
             else:
                 payload["text"] = await _anthropic_text(prompt)
                 payload["model"] = os.environ.get(

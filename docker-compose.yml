@@ -10,7 +10,12 @@ services:
       # browser never sees them. With none set, the coach falls back to
       # its deterministic template.
       #
-      # Azure OpenAI (the configured backend):
+      # Any OpenAI-compatible endpoint (OpenAI, Ollama, LM Studio, …).
+      # From inside this container, a server on your Mac is reachable at
+      # host.docker.internal, not localhost.
+      - COACH_BASE_URL=${COACH_BASE_URL:-}
+      - COACH_API_KEY=${COACH_API_KEY:-}
+      # Azure OpenAI:
       - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT:-}
       - AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY:-}
       - AZURE_OPENAI_DEPLOYMENT=${AZURE_OPENAI_DEPLOYMENT:-}
