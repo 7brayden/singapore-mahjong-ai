@@ -76,6 +76,9 @@ export interface DiscardAnalysis {
   win_prob?: number;
   /** Expected net points of the hand this discard keeps (value model). */
   hand_value?: number;
+  /** True on the tile the seat's own agent would discard — always
+      listed first, and the same pick the coach explains. */
+  agent_pick?: boolean;
 }
 
 export interface OpponentAnalysis {

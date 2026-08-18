@@ -37,7 +37,9 @@ function candidateNote(c: DiscardAnalysis, isBest: boolean): string {
   const danger = Math.round(c.danger * 100);
   const risk = danger >= 60 ? "a risky throw right now" :
                danger >= 35 ? "a moderate risk" : "a safe throw";
-  const base = `${isBest ? "Best line — this" : "This"} ${stage} with ${c.acceptance} improving ${
+  const lead = c.agent_pick ? "The coach's pick — this"
+             : isBest ? "Best line — this" : "This";
+  const base = `${lead} ${stage} with ${c.acceptance} improving ${
     c.acceptance === 1 ? "tile" : "tiles"}, and it's ${risk} (${danger}%).`;
   if (c.deal_in_prob === undefined) return base;
   const p = c.deal_in_prob * 100;
@@ -226,7 +228,14 @@ export function Sidebar({ view, analysis, displayNames, personas, paused,
                     <span className="candidate-main">
                       <span className="candidate-title">
                         Discard {face.label}
-                        {i === 0 && <span className="best-chip">★ Best</span>}
+                        {i === 0 && (
+                          <span className="best-chip">
+                            {c.agent_pick ? "★ Coach's pick" : "★ Best"}
+                          </span>
+                        )}
+                        {i === 1 && candidates[0].agent_pick && (
+                          <span className="fastest-chip">⚡ Fastest</span>
+                        )}
                       </span>
                       <span className="candidate-acceptance">
                         {c.acceptance} {c.acceptance === 1 ? "tile improves" : "tiles improve"} your hand

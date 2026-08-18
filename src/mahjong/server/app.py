@@ -132,7 +132,17 @@ async def hint(game_id: str):
 @app.get("/games/{game_id}/analysis")
 async def analysis(game_id: str):
     managed = _get_or_404(game_id)
-    return analyze_seat(managed.interactive.game, managed.human_seat)
+    interactive = managed.interactive
+    # If the human is choosing a discard, ask their seat's agent what
+    # it would throw and star that tile — the coach explains this same
+    # pick, so advisor and coach agree by construction.
+    agent_pick = None
+    pending = interactive.pending
+    if (isinstance(pending, DiscardRequest)
+            and pending.player == managed.human_seat):
+        agent_pick = interactive.game.dispatch_to_agent(pending)
+    return analyze_seat(interactive.game, managed.human_seat,
+                        agent_pick=agent_pick)
 
 
 def _suggestion_text(request, suggestion) -> str:

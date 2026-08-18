@@ -106,6 +106,24 @@ def test_analysis_payload():
         "visibility", "discard_absence", "opponent_threat", "suit_safety"}
 
 
+def test_advisor_stars_the_agents_pick():
+    """The starred discard must be the SAME tile the coach explains.
+
+    /hint returns the seat agent's choice; /analysis must list that
+    tile first and flag it, so the sidebar's recommendation can never
+    contradict the coach's narration of the agent's pick.
+    """
+    data = create(seed=9)
+    game_id = data["game_id"]
+    suggestion = client.get(f"/games/{game_id}/hint").json()["suggestion"]
+    analysis = client.get(f"/games/{game_id}/analysis").json()
+    first = analysis["discards"][0]
+    assert first["tile"] == suggestion
+    assert first["agent_pick"] is True
+    # Only the pick carries the flag
+    assert all("agent_pick" not in d for d in analysis["discards"][1:])
+
+
 def test_websocket_pushes_view_after_action():
     data = create(seed=4, bots=["greedy"] * 4)
     game_id = data["game_id"]

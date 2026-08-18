@@ -37,12 +37,21 @@ _win_model = _fresh(load_win_model(), OUTCOME_FEATURES)
 _value_model = _fresh(load_value_model(), OUTCOME_FEATURES)
 
 
-def analyze_seat(game: GameState, seat: int) -> Dict:
+def analyze_seat(game: GameState, seat: int,
+                 agent_pick: int = None) -> Dict:
     """Full decision analysis from one seat's point of view.
 
     Uses only information visible to that seat. With 14 tiles (about to
     discard) every discard option is scored; with 13 tiles the hand's
     waits are reported instead.
+
+    ``agent_pick`` is the tile the seat's own agent would discard right
+    now. When given, that entry is flagged and moved to the front so
+    the UI's starred recommendation is the SAME tile the coach explains
+    — the advisor must never contradict the coach. The rest of the list
+    keeps its pure-efficiency order (shanten ASC, acceptance DESC),
+    which is the teaching contrast: "here is the fastest line, here is
+    why the agent didn't take it".
     """
     hand = game.hands[seat]
     visible = game.get_visible_counts(seat)
@@ -85,6 +94,12 @@ def analyze_seat(game: GameState, seat: int) -> Dict:
                     # Expected net points of the hand this discard keeps
                     entry["hand_value"] = round(_value_model.predict(w), 3)
             discards.append(entry)
+        if agent_pick is not None:
+            for i, entry in enumerate(discards):
+                if entry["tile"] == agent_pick:
+                    entry["agent_pick"] = True
+                    discards.insert(0, discards.pop(i))
+                    break
         analysis["discards"] = discards
     elif shanten == 0:
         analysis["waiting_on"] = get_winning_tiles(
