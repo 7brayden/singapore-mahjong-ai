@@ -96,6 +96,75 @@ class LinearModel:
         return rows
 
 
+class CompositeValueModel:
+    """Phase C hand value: decomposed expectation instead of one ridge.
+
+        V(x) = P(win|x) · E[points | win, x]  −  P(pay|x) · E[points | pay, x]
+
+    net_points is a terrible direct regression target — 42% exact
+    zeros with ±96 tails — so a single ridge model hedges everything
+    into ±2 points, and the agent's EV comparison against the fixed
+    deal-in cost (8.55) is rigged toward folding. Each component here
+    is an easier problem: two probabilities (logistic), and two
+    magnitude regressions fitted only on the hands where something
+    actually happened (no zeros to hedge toward). The recomposed V
+    keeps a realistic spread.
+
+    Duck-types LinearModel where it matters: .features, .predict(x),
+    .metadata, .link — so the agent, the analysis endpoint, and the
+    _fresh() staleness check need no special cases.
+    """
+
+    link = "identity"  # output is points, like the model it replaces
+
+    def __init__(self, win: LinearModel, win_size: LinearModel,
+                 pay: LinearModel, pay_size: LinearModel,
+                 metadata: Optional[Dict] = None):
+        self.win, self.win_size = win, win_size
+        self.pay, self.pay_size = pay, pay_size
+        self.features = win.features
+        for part in (win_size, pay, pay_size):
+            if part.features != self.features:
+                raise ValueError("composite components disagree on features")
+        self.metadata = metadata or {}
+
+    @classmethod
+    def load(cls, path: str) -> "CompositeValueModel":
+        with open(path) as f:
+            data = json.load(f)
+        parts = {name: LinearModel(c["features"], c["mean"], c["scale"],
+                                   c["coef"], c["intercept"], c.get("metadata"),
+                                   c.get("link", "logistic"))
+                 for name, c in data["components"].items()}
+        return cls(parts["win"], parts["win_size"], parts["pay"],
+                   parts["pay_size"], data.get("metadata"))
+
+    def save(self, path: str) -> None:
+        def _dump(m: LinearModel) -> Dict:
+            return {"features": m.features, "mean": m.mean, "scale": m.scale,
+                    "coef": m.coef, "intercept": m.intercept,
+                    "metadata": m.metadata, "link": m.link}
+        with open(path, "w") as f:
+            json.dump({
+                "kind": "composite_value",
+                "components": {"win": _dump(self.win),
+                               "win_size": _dump(self.win_size),
+                               "pay": _dump(self.pay),
+                               "pay_size": _dump(self.pay_size)},
+                "metadata": self.metadata,
+            }, f, indent=2)
+            f.write("\n")
+
+    def predict(self, x: List[float]) -> float:
+        """Expected net points. Magnitudes are clamped at zero — a
+        ridge extrapolating a negative 'size of the win' is noise."""
+        p_win = self.win.predict(x)
+        p_pay = self.pay.predict(x)
+        e_win = max(0.0, self.win_size.predict(x))
+        e_pay = max(0.0, self.pay_size.predict(x))
+        return p_win * e_win - p_pay * e_pay
+
+
 def load_danger_model() -> Optional[LinearModel]:
     """The packaged deal-in model, or None if not trained yet."""
     if not os.path.exists(DANGER_MODEL_PATH):
@@ -109,9 +178,15 @@ def load_win_model() -> Optional[LinearModel]:
     return LinearModel.load(WIN_MODEL_PATH)
 
 
-def load_value_model() -> Optional[LinearModel]:
+def load_value_model():
     """The packaged hand-value model: expected NET POINTS from a
-    post-discard state. Identity link — its output is points."""
+    post-discard state. Since Phase C this is a CompositeValueModel;
+    a pre-composite monolithic artifact still loads as a LinearModel,
+    so an old checkout keeps working."""
     if not os.path.exists(VALUE_MODEL_PATH):
         return None
+    with open(VALUE_MODEL_PATH) as f:
+        kind = json.load(f).get("kind")
+    if kind == "composite_value":
+        return CompositeValueModel.load(VALUE_MODEL_PATH)
     return LinearModel.load(VALUE_MODEL_PATH)

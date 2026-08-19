@@ -37,7 +37,8 @@ from sklearn.preprocessing import StandardScaler
 
 from mahjong.ml.features import DANGER_FEATURES, OUTCOME_FEATURES
 from mahjong.ml.model import (
-    LinearModel, DANGER_MODEL_PATH, WIN_MODEL_PATH, VALUE_MODEL_PATH,
+    LinearModel, CompositeValueModel,
+    DANGER_MODEL_PATH, WIN_MODEL_PATH, VALUE_MODEL_PATH,
 )
 
 TEST_FRACTION = 0.2
@@ -246,17 +247,22 @@ def train_win(data_dir: str):
 
 
 def train_value(data_dir: str):
-    """The Phase A model: expected NET POINTS from a post-discard state.
+    """Phase C value model: a decomposed expectation, not one ridge.
 
-    Same table and features as the win model, but regression on the
-    realized net_points — so a live full-flush track is worth more than
-    a chicken hand at the same shanten. Labels are per-HAND (every
-    decision in a seat's hand shares one outcome), so the effective
-    sample count is seats×games, not rows — the reason this trains on a
-    10k-game run.
+        V = P(win) · E[points | win]  −  P(pay) · E[points | pay]
+
+    net_points is 42% exact zeros with ±96-point tails; a single ridge
+    on it hedges every prediction into about ±2 points (std 2.2 vs the
+    label's 8.9), and the agent's EV comparison against the full-scale
+    deal-in constant then systematically over-folds. Decomposed, each
+    part is an easier problem — and the magnitude models never see a
+    zero, so nothing drags them toward the mean.
+
+    The monolithic ridge and a GBM are still fitted every run, as the
+    printed baselines this has to beat.
     """
     print("\n" + "═" * 70)
-    print("VALUE MODEL — E[net points | post-discard state] — label: net_points")
+    print("VALUE MODEL (composite) — P(win)·E[pts|win] − P(pay)·E[pts|pay]")
     print("═" * 70)
     header, data = load_table(os.path.join(data_dir, "outcome.csv.gz"))
     col = {name: i for i, name in enumerate(header)}
@@ -269,37 +275,106 @@ def train_value(data_dir: str):
     train_x, train_y = train[:, feat_idx], train[:, col["net_points"]]
     test_x, test_y = test[:, feat_idx], test[:, col["net_points"]]
     print(f"  label: mean {train_y.mean():+.2f}, std {train_y.std():.2f}, "
+          f"zeros {100 * (train_y == 0).mean():.1f}%, "
           f"range [{train_y.min():.0f}, {train_y.max():.0f}]\n")
 
-    scaler = StandardScaler().fit(train_x)
-    reg = Ridge(alpha=1.0)
-    reg.fit(scaler.transform(train_x), train_y)
-    pred = reg.predict(scaler.transform(test_x))
+    # ── Components ───────────────────────────────────────────────────
+    # Events are disjoint: won == net_points > 0, paid == net_points < 0
+    # (tai-only accounting — the winner collects, payers pay, everyone
+    # else is untouched). The two probabilities are modelled separately
+    # rather than as one 3-class softmax so each stays a plain
+    # LinearModel the pure-Python evaluator already knows how to read.
+    train_won = (train_y > 0).astype(float)
+    train_paid = (train_y < 0).astype(float)
+    test_won = (test_y > 0).astype(float)
+    test_paid = (test_y < 0).astype(float)
+
+    sc_w, clf_w = fit_logreg(train_x, train_won)
+    sc_p, clf_p = fit_logreg(train_x, train_paid)
+    print("  P(win) component:")
+    report("    logistic", test_won, clf_w.predict_proba(
+        sc_w.transform(test_x))[:, 1])
+    print("  P(pay) component:")
+    report("    logistic", test_paid, clf_p.predict_proba(
+        sc_p.transform(test_x))[:, 1])
+
+    win_rows = train_y > 0
+    pay_rows = train_y < 0
+    sc_ws = StandardScaler().fit(train_x[win_rows])
+    reg_ws = Ridge(alpha=1.0).fit(sc_ws.transform(train_x[win_rows]),
+                                  train_y[win_rows])
+    sc_ps = StandardScaler().fit(train_x[pay_rows])
+    reg_ps = Ridge(alpha=1.0).fit(sc_ps.transform(train_x[pay_rows]),
+                                  -train_y[pay_rows])
+    t_win, t_pay = test_y > 0, test_y < 0
+    print(f"  E[pts|win]  on {win_rows.sum():,} winner rows: "
+          f"test MAE {mean_absolute_error(test_y[t_win], reg_ws.predict(sc_ws.transform(test_x[t_win]))):.3f}  "
+          f"R² {r2_score(test_y[t_win], reg_ws.predict(sc_ws.transform(test_x[t_win]))):.4f}")
+    print(f"  E[pts|pay]  on {pay_rows.sum():,} payer rows:  "
+          f"test MAE {mean_absolute_error(-test_y[t_pay], reg_ps.predict(sc_ps.transform(test_x[t_pay]))):.3f}  "
+          f"R² {r2_score(-test_y[t_pay], reg_ps.predict(sc_ps.transform(test_x[t_pay]))):.4f}\n")
+
+    # ── Recomposed V on the held-out set ─────────────────────────────
+    def _lin(scaler, est, link):
+        return LinearModel(
+            features=list(OUTCOME_FEATURES),
+            mean=[float(v) for v in scaler.mean_],
+            scale=[float(v) for v in scaler.scale_],
+            coef=[float(v) for v in np.atleast_2d(est.coef_)[0]],
+            intercept=float(np.atleast_1d(est.intercept_)[0]),
+            metadata={}, link=link)
+
+    composite = CompositeValueModel(
+        win=_lin(sc_w, clf_w, "logistic"),
+        win_size=_lin(sc_ws, reg_ws, "identity"),
+        pay=_lin(sc_p, clf_p, "logistic"),
+        pay_size=_lin(sc_ps, reg_ps, "identity"))
+
+    p_w = clf_w.predict_proba(sc_w.transform(test_x))[:, 1]
+    p_p = clf_p.predict_proba(sc_p.transform(test_x))[:, 1]
+    e_w = np.maximum(0.0, reg_ws.predict(sc_ws.transform(test_x)))
+    e_p = np.maximum(0.0, reg_ps.predict(sc_ps.transform(test_x)))
+    pred = p_w * e_w - p_p * e_p
 
     def value_report(name, p):
         print(f"  {name:<28} MAE {mean_absolute_error(test_y, p):.3f}   "
-              f"R² {r2_score(test_y, p):.4f}")
+              f"R² {r2_score(test_y, p):.4f}   spread σ {np.std(p):.2f}")
 
-    value_report("ridge regression", pred)
-    # Baselines: the mean (no model), and shanten alone (what the win
-    # model effectively saw before the tai features existed)
+    value_report("composite", pred)
+    # Baselines this has to beat, all on identical rows
     value_report("predict the mean", np.full_like(test_y, train_y.mean()))
-    sh = train[:, [col["shanten"]]]
-    sh_reg = Ridge(alpha=1.0).fit(sh, train_y)
-    value_report("shanten only", sh_reg.predict(test[:, [col["shanten"]]]))
+    sc_m = StandardScaler().fit(train_x)
+    mono = Ridge(alpha=1.0).fit(sc_m.transform(train_x), train_y)
+    value_report("monolithic ridge", mono.predict(sc_m.transform(test_x)))
     gbm = HistGradientBoostingRegressor(max_iter=300, random_state=0)
     gbm.fit(train_x, train_y)
     value_report("hist gradient boosting", gbm.predict(test_x))
+    print(f"  {'(label std — the target spread)':<28} σ {np.std(test_y):.2f}")
 
-    coefficient_table(reg, OUTCOME_FEATURES, unit=3)
-    model = export(scaler, reg, OUTCOME_FEATURES, VALUE_MODEL_PATH, {
-        "label": "net_points", "games": int(n_games), "rows": int(len(data)),
+    # Decile lift — the number the agent actually lives on: sort the
+    # held-out hands by predicted V, does actual value climb with it?
+    order = np.argsort(pred)
+    deciles = np.array_split(order, 10)
+    actual = [float(test_y[idx].mean()) for idx in deciles]
+    monotone = sum(1 for a, b in zip(actual, actual[1:]) if b >= a)
+    print("\n  Decile lift (predicted V decile → actual mean points):")
+    print("    " + "  ".join(f"{a:+.2f}" for a in actual))
+    print(f"    monotone steps: {monotone}/9, "
+          f"D10−D1 spread {actual[-1] - actual[0]:+.2f} pts")
+
+    composite.metadata = {
+        "label": "net_points (decomposed)", "games": int(n_games),
+        "rows": int(len(data)),
         "test_mae": round(float(mean_absolute_error(test_y, pred)), 3),
         "test_r2": round(float(r2_score(test_y, pred)), 4),
+        "pred_spread_std": round(float(np.std(pred)), 3),
+        "decile_actual": [round(a, 3) for a in actual],
         "trained": date.today().isoformat(),
-    }, link="identity")
+        "code_commit": _git_commit(), "n_features": len(OUTCOME_FEATURES),
+    }
+    composite.save(VALUE_MODEL_PATH)
     print(f"\n  exported → {VALUE_MODEL_PATH}")
-    return model
+    return composite
 
 
 def main():

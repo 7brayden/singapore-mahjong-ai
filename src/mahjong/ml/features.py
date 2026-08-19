@@ -143,6 +143,24 @@ OUTCOME_FEATURES = [
     "wind_progress",        # seat + prevailing wind triplet trajectory / 2
     "triplet_progress",     # pong-track shape (碰碰胡) / 4
     "run_progress",         # chow-track shape (平胡) / 4
+    # ── Phase C additions ────────────────────────────────────────────
+    # The GBM ceiling on the 16 features above was R² 0.088 — the
+    # information wasn't in the vector. These add what the engine knows
+    # but the model couldn't see: which tai tracks are still alive,
+    # tai already banked, and the phase interactions a linear model
+    # cannot form on its own.
+    "pinghu_live",          # no bonus tile AND every meld a chow → 4-tai
+                            # ping hu still reachable (the coach's
+                            # tai_context, as a number)
+    "tenpai",               # shanten == 0 — hand value jumps at ready;
+                            # linear shanten/6 can't express the cliff
+    "locked_tai",           # tai banked whatever the final shape:
+                            # bonus tai + completed dragon/wind triplets / 8
+    "flush_purity",         # biggest suit / all tiles — full-flush track,
+                            # separate from suit_concentration which
+                            # counts honors as flush-compatible
+    "shanten_x_turn",       # far hand late in the game ≈ worthless
+    "accept_x_wall",        # improving tiles only pay while draws remain
 ]
 
 # Progress of one tile type toward a scoring triplet: a pair is worth
@@ -248,21 +266,41 @@ def outcome_features(player_idx: int, game, counts_after: List[int],
     triplet_prog = exposed_pongs + concealed_triplets
     run_prog = exposed_chows + _greedy_runs(counts_after)
 
+    # Phase C features
+    bonus_tai = _bonus_tai(flowers, seat_index)
+    pinghu_live = 1.0 if (not flowers and exposed_pongs == 0) else 0.0
+    tenpai = 1.0 if shanten <= 0 else 0.0
+    locked = bonus_tai
+    locked += sum(1 for d in range(DRAGON_START, DRAGON_START + 3)
+                  if full[d] >= 3)
+    if full[seat_wind] >= 3:
+        locked += 1
+    if full[game.prevailing_wind] >= 3:
+        locked += 1
+    turn_frac = min(1.0, game.turn / 60.0)
+    wall_frac = min(1.0, game.tiles_remaining / 92.0)
+
     return [
         shanten / 6.0,
         min(1.0, acceptance / 30.0),
-        min(1.0, game.turn / 60.0),
-        min(1.0, game.tiles_remaining / 92.0),
+        turn_frac,
+        wall_frac,
         num_melds / 4.0,
         threat_data["max_threat"],
         opp_melds / 12.0,
         1.0 if num_melds == 0 else 0.0,
         1.0 if flowers else 0.0,
-        min(1.0, _bonus_tai(flowers, seat_index) / 8.0),
+        min(1.0, bonus_tai / 8.0),
         (biggest_suit + honors) / total_tiles if total_tiles else 0.0,
         honors / total_tiles if total_tiles else 0.0,
         min(1.0, dragon_prog / 3.0),
         min(1.0, wind_prog / 2.0),
         min(1.0, triplet_prog / 4.0),
         min(1.0, run_prog / 4.0),
+        pinghu_live,
+        tenpai,
+        min(1.0, locked / 8.0),
+        biggest_suit / total_tiles if total_tiles else 0.0,
+        (shanten / 6.0) * turn_frac,
+        min(1.0, acceptance / 30.0) * wall_frac,
     ]

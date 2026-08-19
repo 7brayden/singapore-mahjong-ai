@@ -10,7 +10,8 @@ from mahjong.ml.features import (
 )
 from mahjong.ml.datagen import DANGER_COLUMNS, OUTCOME_COLUMNS, generate_game
 from mahjong.ml.model import (
-    LinearModel, load_danger_model, load_value_model, load_win_model,
+    LinearModel, CompositeValueModel,
+    load_danger_model, load_value_model, load_win_model,
 )
 
 
@@ -235,6 +236,61 @@ def test_packaged_value_model_is_sane():
     # both must sit inside plausible point stakes for this table.
     assert near > far
     assert -10.0 < far < near < 40.0
+
+
+# ── Phase C: composite value model ───────────────────────────────────
+
+def _flat(coef_overrides, intercept=0.0, link="logistic"):
+    n = len(OUTCOME_FEATURES)
+    coef = [0.0] * n
+    for name, v in coef_overrides.items():
+        coef[OUTCOME_FEATURES.index(name)] = v
+    return LinearModel(features=list(OUTCOME_FEATURES),
+                       mean=[0.0] * n, scale=[1.0] * n,
+                       coef=coef, intercept=intercept, link=link)
+
+
+def test_composite_value_predicts_decomposed_expectation():
+    comp = CompositeValueModel(
+        win=_flat({}, intercept=0.0),          # sigmoid(0) = 0.5
+        win_size=_flat({}, intercept=6.0, link="identity"),
+        pay=_flat({}, intercept=-1.0986),      # sigmoid ≈ 0.25
+        pay_size=_flat({}, intercept=8.0, link="identity"))
+    x = [0.0] * len(OUTCOME_FEATURES)
+    # V = 0.5·6 − 0.25·8 = 1.0
+    assert comp.predict(x) == pytest.approx(1.0, abs=1e-3)
+
+
+def test_composite_clamps_negative_magnitudes():
+    comp = CompositeValueModel(
+        win=_flat({}, intercept=10.0),          # P(win) ≈ 1
+        win_size=_flat({}, intercept=-5.0, link="identity"),
+        pay=_flat({}, intercept=-10.0),         # P(pay) ≈ 0
+        pay_size=_flat({}, intercept=3.0, link="identity"))
+    x = [0.0] * len(OUTCOME_FEATURES)
+    # A negative "size of the win" is extrapolation noise → clamped to 0,
+    # never a phantom penalty.
+    assert comp.predict(x) == pytest.approx(0.0, abs=1e-3)
+
+
+def test_composite_roundtrip_and_loader_dispatch(tmp_path):
+    comp = CompositeValueModel(
+        win=_flat({"shanten": -2.0}), win_size=_flat({}, 5.0, "identity"),
+        pay=_flat({}, -1.0), pay_size=_flat({}, 4.0, "identity"),
+        metadata={"label": "test"})
+    path = tmp_path / "value_model.json"
+    comp.save(str(path))
+    loaded = CompositeValueModel.load(str(path))
+    x = [0.1] * len(OUTCOME_FEATURES)
+    assert loaded.predict(x) == pytest.approx(comp.predict(x))
+    assert loaded.features == list(OUTCOME_FEATURES)
+    assert loaded.link == "identity"
+
+
+def test_packaged_value_model_is_composite():
+    model = load_value_model()
+    assert isinstance(model, CompositeValueModel), (
+        "value_model.json should be the Phase C composite artifact")
 
 
 # ── Phase B: claims as branch evaluation ─────────────────────────────

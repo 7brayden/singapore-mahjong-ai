@@ -104,8 +104,13 @@ def _ron_would_be_legal(game: GameState, tile_id: int, waits: dict,
 
 def generate_game(game_id: int, seed: int, lineup_fn,
                   danger_rows: list, outcome_rows: list,
-                  lineup_idx: int = 0) -> dict:
-    """Play one seeded game, appending labeled rows to both tables."""
+                  lineup_idx: int = 0, with_danger: bool = True) -> dict:
+    """Play one seeded game, appending labeled rows to both tables.
+
+    with_danger=False skips the danger table entirely — no perfect-
+    information wait sets, no per-candidate ron-legality probes — for
+    cheap outcome-only regeneration when only OUTCOME_FEATURES changed.
+    """
     game = GameState(lineup_fn(), seed=seed)
     gen = game.step_game()
     wait_cache: dict = {}
@@ -123,24 +128,30 @@ def generate_game(game_id: int, seed: int, lineup_fn,
                 hand = game.hands[seat]
                 visible = game.get_visible_counts(seat)
                 threat = estimate_opponent_threats(seat, game)
-                waits = _opponent_waits(game, seat, wait_cache)
-                is_last = game.tiles_remaining <= DEAD_WALL_SIZE
                 evals = evaluate_discards(hand, visible_counts=visible)
 
                 chosen_eval = None
-                for e in evals:
-                    tile = e["tile_id"]
-                    waited = any(tile in w for w in waits.values())
-                    legal = waited and _ron_would_be_legal(
-                        game, tile, waits, is_last)
-                    chosen = 1 if tile == answer else 0
-                    if chosen:
-                        last_chosen = (len(danger_rows), seat, tile)
-                        chosen_eval = e
-                    danger_rows.append(
-                        [game_id, decision_id, lineup_idx, seat, tile]
-                        + danger_features(tile, seat, game, visible, threat)
-                        + [int(waited), int(legal), chosen, 0])
+                if with_danger:
+                    waits = _opponent_waits(game, seat, wait_cache)
+                    is_last = game.tiles_remaining <= DEAD_WALL_SIZE
+                    for e in evals:
+                        tile = e["tile_id"]
+                        waited = any(tile in w for w in waits.values())
+                        legal = waited and _ron_would_be_legal(
+                            game, tile, waits, is_last)
+                        chosen = 1 if tile == answer else 0
+                        if chosen:
+                            last_chosen = (len(danger_rows), seat, tile)
+                            chosen_eval = e
+                        danger_rows.append(
+                            [game_id, decision_id, lineup_idx, seat, tile]
+                            + danger_features(tile, seat, game, visible, threat)
+                            + [int(waited), int(legal), chosen, 0])
+                else:
+                    for e in evals:
+                        if e["tile_id"] == answer:
+                            chosen_eval = e
+                            break
 
                 # Outcome row: the state the CHOSEN discard leaves behind
                 # — its realized net points become the value label.
@@ -175,11 +186,12 @@ def generate_game(game_id: int, seed: int, lineup_fn,
 
 def _run_one(task):
     """Worker entry: play one game, return its rows (multiprocessing)."""
-    game_id, seed, lineup_idx = task
+    game_id, seed, lineup_idx, with_danger = task
     danger_rows: list = []
     outcome_rows: list = []
     stats = generate_game(game_id, seed, LINEUPS[lineup_idx],
-                          danger_rows, outcome_rows, lineup_idx)
+                          danger_rows, outcome_rows, lineup_idx,
+                          with_danger=with_danger)
     return danger_rows, outcome_rows, stats["win_type"]
 
 
@@ -198,6 +210,10 @@ def main() -> None:
     parser.add_argument("--progress-every", type=int, default=100)
     parser.add_argument("--workers", type=int,
                         default=max(1, (os.cpu_count() or 2) - 2))
+    parser.add_argument("--no-danger", action="store_true",
+                        help="outcome table only (skips the expensive "
+                             "per-candidate wait/ron probes; use when "
+                             "only OUTCOME_FEATURES changed)")
     args = parser.parse_args()
 
     os.makedirs(args.out, exist_ok=True)
@@ -206,7 +222,7 @@ def main() -> None:
     wins = {"ron": 0, "tsumo": 0, None: 0}
     started = time.time()
 
-    tasks = [(i, args.seed_start + i, i % len(LINEUPS))
+    tasks = [(i, args.seed_start + i, i % len(LINEUPS), not args.no_danger)
              for i in range(args.games)]
 
     def _accumulate(done: int, result) -> None:
@@ -234,16 +250,17 @@ def main() -> None:
         for done, task in enumerate(tasks, 1):
             _accumulate(done, _run_one(task))
 
-    danger_path = os.path.join(args.out, "danger.csv.gz")
     outcome_path = os.path.join(args.out, "outcome.csv.gz")
-    _write_gz(danger_path, DANGER_COLUMNS, danger_rows)
     _write_gz(outcome_path, OUTCOME_COLUMNS, outcome_rows)
-
-    hot = sum(r[-3] for r in danger_rows)
-    print(f"\nWrote {danger_path}: {len(danger_rows):,} rows, "
-          f"{hot:,} hot ({100 * hot / max(1, len(danger_rows)):.2f}%)")
-    print(f"Wrote {outcome_path}: {len(outcome_rows):,} rows, "
+    print(f"\nWrote {outcome_path}: {len(outcome_rows):,} rows, "
           f"{sum(r[-2] for r in outcome_rows):,} winning-seat rows")
+
+    if not args.no_danger:
+        danger_path = os.path.join(args.out, "danger.csv.gz")
+        _write_gz(danger_path, DANGER_COLUMNS, danger_rows)
+        hot = sum(r[-3] for r in danger_rows)
+        print(f"Wrote {danger_path}: {len(danger_rows):,} rows, "
+              f"{hot:,} hot ({100 * hot / max(1, len(danger_rows)):.2f}%)")
 
 
 if __name__ == "__main__":

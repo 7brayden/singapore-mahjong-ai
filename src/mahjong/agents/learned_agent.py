@@ -56,7 +56,9 @@ from mahjong.agents.hybrid_agent import HybridAgent
 from mahjong.hand import calculate_shanten, evaluate_discards, tile_acceptance
 from mahjong.opponent_model import estimate_opponent_threats
 from mahjong.tiles import NUM_STANDARD_UNIQUE
-from mahjong.ml.features import danger_features, outcome_features
+from mahjong.ml.features import (
+    DANGER_FEATURES, OUTCOME_FEATURES, danger_features, outcome_features,
+)
 from mahjong.ml.model import (
     LinearModel, load_danger_model, load_value_model,
 )
@@ -88,6 +90,14 @@ class LearnedAgent(HybridAgent):
                             else load_value_model())
         if self.value_model is None:
             raise RuntimeError("No trained value model found. " + _TRAIN_HINT)
+        # A stale artifact fed today's feature vectors would mis-predict
+        # silently (or crash on length) — refuse loudly instead.
+        if self.model.features != list(DANGER_FEATURES):
+            raise RuntimeError("Danger model was trained on different "
+                               "features than this code computes. " + _TRAIN_HINT)
+        if self.value_model.features != list(OUTCOME_FEATURES):
+            raise RuntimeError("Value model was trained on different "
+                               "features than this code computes. " + _TRAIN_HINT)
 
     def deal_in_probability(self, tile_id: int, player_idx: int,
                             game_state, threat_data, visible) -> float:
