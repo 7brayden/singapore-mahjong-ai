@@ -1,6 +1,8 @@
 # Singapore Mahjong AI
 
-An agent that plays Singapore Mahjong, built from scratch. It weighs hand efficiency against the risk of feeding opponents when deciding what to discard, and ships with a command-line advisor you can run during real games.
+A Singapore Mahjong training platform built from scratch: a rules-accurate engine, a machine-learned opponent that prices every discard and claim in points, and an AI coach that explains each decision using numbers the engine computed — playable in the browser, with a CLI advisor for real games.
+
+**Quick taste:** `docker compose up --build` → http://localhost:5173. No API keys, no downloads — the trained models ship in the repo.
 
 ## What is this?
 
@@ -22,7 +24,64 @@ If you don't play, here's the jargon used below:
 | **Chow** | Claiming a discard to form a sequence (e.g. 3-4-5). Only the next player can chow. |
 | **Tile acceptance** | How many drawable tiles would improve your hand. Higher = more flexible. |
 
-## Quick start
+## Getting started
+
+**Prerequisites:** [Docker](https://docs.docker.com/get-docker/) (for the web
+app) or Python 3.9+ (for everything else). No GPU, no accounts, no API keys —
+every optional extra degrades gracefully.
+
+### Play in the browser (recommended)
+
+```bash
+git clone https://github.com/7brayden/singapore-mahjong-ai.git
+cd singapore-mahjong-ai
+docker compose up --build
+```
+
+Open **http://localhost:5173**. Pick your three opponents (up to the trained
+agent), play with the coach sidebar on, or hide it for serious practice. The
+trained models ship in the repo — nothing to download or train first.
+
+Without Docker:
+
+```bash
+pip install -e ".[server]"
+PYTHONPATH=src uvicorn mahjong.server.app:app --port 8000   # terminal 1
+cd frontend && npm install && npm run dev                    # terminal 2 → :5173
+```
+
+### Optional: give the coach a voice (free, local)
+
+Out of the box the coach explains decisions with a deterministic template —
+correct numbers, plain prose. Point it at any OpenAI-compatible LLM and it
+writes fluent, principle-grounded lessons instead. The zero-cost path is
+[Ollama](https://ollama.com):
+
+```bash
+ollama pull qwen2.5:7b        # ~4.7 GB, runs on CPU
+OLLAMA_KEEP_ALIVE=30s ollama serve
+```
+
+Then create a `.env` file next to `docker-compose.yml`:
+
+```
+COACH_BASE_URL=http://host.docker.internal:11434/v1
+COACH_MODEL=qwen2.5:7b
+```
+
+and restart (`docker compose up -d`). Verify the wiring with the built-in
+diagnostic — it prints the selected provider, masks your keys, makes one real
+test call, and translates any failure into what to actually fix:
+
+```bash
+docker compose exec api python -m mahjong.coach.check
+```
+
+Cloud backends (OpenAI, Azure OpenAI, Anthropic) work the same way — see
+[The coach](#the-coach) below for every variable. Keys live in `.env`
+(gitignored), stay server-side, and never reach the browser.
+
+### CLI discard advisor
 
 ```bash
 pip install -e .
@@ -58,6 +117,25 @@ Type tiles in any order. Format:
 
 One caveat: the advisor only optimises for hand efficiency. It doesn't track opponent discards, so judge defense yourself in the late game.
 
+### Run the tests
+
+```bash
+pip install -e ".[dev]"
+pytest                      # full engine + ML + server + coach suite
+```
+
+### Retrain the models from scratch (optional)
+
+The trained JSON artifacts are committed, so this is only needed if you change
+features, labels, or house rules:
+
+```bash
+pip install -e ".[ml]"                                        # numpy + scikit-learn (training only)
+PYTHONPATH=src python3 -m mahjong.ml.datagen --games 10000 --out data/   # ~1 h on 8 cores
+PYTHONPATH=src python3 -m mahjong.ml.train --data data/       # fits + prints the full evaluation
+PYTHONPATH=src python3 experiments/duplicate.py --games 3000  # the statistical verdict vs Hybrid
+```
+
 ## Project structure
 
 ```
@@ -77,19 +155,27 @@ src/mahjong/
 │   ├── datagen.py         # Simulates games, dumps labeled decision records
 │   ├── train.py           # Fits models, prints metrics vs the heuristic (needs sklearn)
 │   ├── model.py           # Evaluates exported JSON weights — zero dependencies
-│   └── danger_model.json  # Trained deal-in model (committed, human-readable)
+│   ├── danger_model.json  # Trained deal-in model (committed, human-readable)
+│   ├── win_model.json     # Trained P(win) model
+│   └── value_model.json   # Composite hand-value model (Phase C)
+├── coach/                 # RAG coach: engine numbers + retrieved principles + LLM prose
+│   ├── corpus.py          # ~15 tagged strategy/rules chunks (this table's rules)
+│   ├── retrieve.py        # Lexical tag retrieval (no embeddings at this size)
+│   ├── explain.py         # Situation builder, provider layer, template fallback
+│   └── check.py           # Setup diagnostic: python -m mahjong.coach.check
 └── agents/
     ├── random_agent.py    # Discards randomly. Never wins.
     ├── greedy_agent.py    # Minimises shanten. Wins a lot, deals in often.
     ├── defensive_agent.py # Minimises danger. Safe, never wins.
     ├── hybrid_agent.py    # Balances offense and defense with dynamic weights.
-    └── learned_agent.py   # Hybrid offense + danger model trained on simulations.
+    └── learned_agent.py   # EV agent: discards AND claims priced in points by the trained models.
 
 tests/                     # pytest suite: shanten, claims, determinism, golden games
 
 experiments/
 ├── run_benchmark.py       # Runs 6 experiments, prints results
 ├── compare_learned.py     # Learned vs Hybrid head-to-head
+├── duplicate.py           # Duplicate-seating evaluator: paired seeds, Wilson CIs, z-tests
 └── generate_plots.py      # Bar charts from benchmark data (needs matplotlib)
 
 results/
@@ -267,10 +353,57 @@ pts/seat, while conceding 4.5 pp of win rate costs ~0.40. The agent
 over-folds — a predictable consequence of pairing a sharp risk model
 (deal-in AUC 0.87) with a fuzzy value model (R² 0.066): the EV comparison
 trusts its precise term and under-weights its noisy one. The learned player
-is statistically the safest and most value-selective at the table, and
+was statistically the safest and most value-selective at the table, and
 statistically the weaker points earner. Fixing the value signal — richer
-features, a stronger regressor, or self-play data — is where the next
-strength comes from.
+features, a stronger regressor, or self-play data — was where the next
+strength had to come from.
+
+### Phase C: fix the value signal — the learned agent takes the lead
+
+Two changes, aimed exactly at that diagnosis:
+
+**Richer features (16 → 22).** The GBM ceiling on the old features was
+R² 0.088 — the information wasn't in the vector. Added: `pinghu_live` (is the
+4-tai ping hu still reachable — the coach's tai-context, as a number),
+`tenpai` (hand value jumps discontinuously at ready), `locked_tai` (tai
+banked whatever the final shape), `flush_purity`, and two interactions a
+linear model cannot form itself (`shanten×turn`, `acceptance×wall`).
+
+**A learnable target.** `net_points` is 42% exact zeros with ±96-point
+tails; a single ridge on it hedges every prediction into ±2 points while the
+deal-in cost stays at full scale — the EV comparison was structurally rigged
+toward folding. Replaced with a decomposed expectation, each part an easier
+problem:
+
+```
+V = P(win) · E[points | win]  −  P(pay) · E[points | pay]
+```
+
+The magnitude models never see a zero, so nothing drags them toward the
+mean. `E[points|win]` alone reaches **R² 0.317** — "how big is this hand" is
+exactly the question the tai features were built to answer. `P(pay)` stays
+near chance (AUC 0.576), honestly: whether you pay lives in opponents'
+hidden hands. The recomposed V hits R² 0.092 — above the monolithic ridge on
+identical features (0.069) **and above the GBM ceiling (0.090)**: the right
+problem decomposition beat the fancier algorithm.
+
+The verdict, same 3,000 seeds (6,000 games) that crowned the hybrid:
+
+| | Win% | DI/disc% | Pts/seat |
+|---|---|---|---|
+| Hybrid | 22.6 [21.9, 23.4] | 1.87 [1.79, 1.95] | −0.414 |
+| **Learned (composite V)** | **24.6 [23.8, 25.4]** | **1.41 [1.35, 1.48]** | **+0.414** |
+
+```
+points diff: learned +3.312/seed  95% CI [+2.209, +4.415]  → genuinely ahead
+win rate   p=0.0003 (significant)      deal-in  p<0.0001 (significant)
+```
+
+The old trade — safety bought with points — is gone: the agent kept the
+lowest deal-in rate at the table AND now out-earns the hybrid, with the win
+rate itself significant for the first time. A fresh-seed 1,000-game run
+agrees (+3.232 [+1.229, +5.235]). The claim decisions inherited the better V
+for free — Phase B's branch comparison never had its own model to retrain.
 
 ## Scoring (tai)
 
@@ -326,10 +459,9 @@ This is the surface the upcoming web UI talks to. The agent attached to a human 
 
 ## Playing in the browser
 
-```bash
-docker compose up --build
-# → app at http://localhost:5173, API at http://localhost:8000 (docs at /docs)
-```
+Setup lives in [Getting started](#getting-started); the short version is
+`docker compose up --build` → http://localhost:5173 (API at :8000, docs at
+`/docs`).
 
 The React frontend (`frontend/`) implements the "Mahjong Trainer" design (see `design_handoff_mahjong_trainer/`): a felt table with the three bots, your clickable hand with per-tile danger heat, claim/kong prompts with an auto-pass countdown, and the coach sidebar — shanten meter, discard advisor with the four-signal danger breakdown, opponent threat gauges, and a hint button. The game-end screen shows the winner's revealed hand and the tai receipt with named scoring items. The Analysis toggle (or "no training wheels") hides all coaching for serious play.
 
@@ -350,7 +482,7 @@ uvicorn mahjong.server.app:app --reload
 
 | Endpoint | Purpose |
 |---|---|
-| `POST /games` | create a game (`seed`, `human_seat`, `bots` — 4 of random/greedy/defensive/hybrid) |
+| `POST /games` | create a game (`seed`, `human_seat`, `bots` — 4 of random/greedy/defensive/hybrid/learned) |
 | `GET /games/{id}` | redacted view for the human seat |
 | `POST /games/{id}/action` | answer the pending decision (discard / claim / chow / kong) |
 | `GET /games/{id}/hint` | what the seat's own bot would do |
@@ -434,7 +566,7 @@ at this corpus size an index would be ceremony. Revisit past ~50 chunks.
 ### Backends
 
 Selected from the environment; the first configured credential wins, and
-`COACH_PROVIDER` (`azure` | `anthropic` | `template`) pins one explicitly.
+`COACH_PROVIDER` (`openai` | `azure` | `anthropic` | `template`) pins one explicitly.
 
 | Provider | Environment |
 |---|---|
@@ -495,7 +627,7 @@ explanations bill one account.
 - Post-game review screen ("Review game with coach") over a hand event log
 - Multi-hand browser sessions backed by session.py (dealer rotation in the UI)
 - Per-user LLM billing before any public deployment (see The coach, below)
-- Value-aware win model (predict points, not just P(win)) so the EV agent pushes big hands
+- Self-play retraining loop: regenerate data with the learned agent seated, retrain, iterate
 - Lookahead: sample future draws, estimate discard value
 - Tune hybrid weights to detected opponent strength
 
@@ -509,3 +641,8 @@ explanations bill one account.
   group-wise train/test splits, calibration, interpretable models
 - Experiment design with controlled baselines and normalised metrics
 - Catching a misleading metric (DI/game vs DI/disc%)
+
+## License
+
+[MIT](LICENSE) — use it, learn from it, build on it. If you deploy the coach
+publicly, remember the note above about per-user LLM billing.
