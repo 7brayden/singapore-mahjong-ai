@@ -219,7 +219,7 @@ def main() -> None:
     os.makedirs(args.out, exist_ok=True)
     danger_rows: list = []
     outcome_rows: list = []
-    wins = {"ron": 0, "tsumo": 0, None: 0}
+    wins = {"ron": 0, "tsumo": 0, "flowers": 0, None: 0}
     started = time.time()
 
     tasks = [(i, args.seed_start + i, i % len(LINEUPS), not args.no_danger)
@@ -239,7 +239,7 @@ def main() -> None:
                   f"danger rows: {len(danger_rows):,} "
                   f"(hot: {hot:,}, dealt-in: {di:,}) — "
                   f"ron {wins['ron']} / tsumo {wins['tsumo']} / "
-                  f"draw {wins[None]}", flush=True)
+                  f"flowers {wins['flowers']} / draw {wins[None]}", flush=True)
 
     if args.workers > 1:
         with multiprocessing.Pool(args.workers) as pool:

@@ -20,13 +20,15 @@ CHUNKS = [
         "tags": ["chow_shape", "concealed", "bonus_tiles", "claim_window",
                  "scoring"],
         "text": (
-            "At this table an all-chows hand with a non-honor pair scores "
-            "4 tai (平胡) ONLY while it holds zero flowers and animals. "
-            "Pick up any bonus tile and the same shape collapses to chou "
-            "ping hu (臭平胡), worth 1 tai. A ping hu of either kind with "
-            "no claimed melds adds 1 more tai (门清). Practical upshot: a "
-            "concealed clean ping hu is a 5-tai hand, and a single chow "
-            "claim or flower can cost most of that value."),
+            "At this table an all-chows hand scores 4 tai (平胡) ONLY "
+            "while it holds zero flowers and animals; any bonus tile "
+            "collapses the same shape to chou ping hu (臭平胡), 1 tai. "
+            "The pair may be any suited tile or a wind that is neither "
+            "your seat nor the prevailing wind. Wait rule: winning by "
+            "DISCARD needs a wait of two or more tiles — an edge, middle, "
+            "or pair wait scores ping hu only if you self-draw the tile. "
+            "Practical upshot: shape your final wait two-sided, and know "
+            "that one flower or one claim can cost most of the value."),
     },
     {
         "id": "rules-tsumo-payment",
@@ -36,8 +38,10 @@ CHUNKS = [
             "Self-draw (自摸) adds NO tai at this table — it changes who "
             "pays, not what the hand is worth: on a tsumo all three "
             "opponents pay, on a ron the shooter alone pays all three "
-            "shares. A hand with zero tai cannot win even by self-draw, "
-            "because of the 1-tai minimum."),
+            "shares. But self-draw still matters for tai twice over: a "
+            "fully concealed hand earns 门清 (+1) only on self-draw, and "
+            "a single-wait ping hu keeps its 4 tai only on self-draw. "
+            "A zero-tai hand cannot win at all (1-tai minimum)."),
     },
     {
         "id": "rules-bonus-tiles",
@@ -47,10 +51,11 @@ CHUNKS = [
             "Each flower matching your seat scores 1 tai (both series "
             "count — East matches flower #1 in each). Each animal is 1 "
             "tai; collecting all four animals adds 1 more (4+1). A "
-            "complete flower series (#1-#4 of one series) adds 1. A hand "
-            "with no bonus tiles at all scores 1 tai (无花) — which is "
-            "why drawing a flower can genuinely REDUCE a hand's value: "
-            "it kills 无花 and degrades ping hu to chou ping hu."),
+            "complete flower series (all four numbers of one colour) adds "
+            "1, and all EIGHT flowers is an instant limit win (花胡). "
+            "There is no tai for having zero bonus tiles — but drawing a "
+            "flower can still genuinely REDUCE a hand's value, because it "
+            "degrades ping hu (4 tai) to chou ping hu (1 tai)."),
     },
     {
         "id": "rules-minimum-tai",
@@ -153,11 +158,13 @@ CHUNKS = [
         "title": "Concealment is worth real points",
         "tags": ["concealed", "claim_window", "chow_shape"],
         "text": (
-            "Staying concealed is worth roughly 0.7 points of hand value "
-            "in our measurements — the concealed ping hu bonus plus the "
-            "information you deny opponents. The first claim spends that "
-            "premium forever. It is not a rule against claiming; it is a "
-            "price tag: the claim must buy at least that much progress."),
+            "Staying concealed is worth real points: a fully concealed "
+            "hand won by self-draw earns 门清 (+1 tai), and our value "
+            "model prices concealment at roughly 0.7 points of hand "
+            "value — the tai plus the information you deny opponents. "
+            "The first claim spends that premium forever. It is not a "
+            "rule against claiming; it is a price tag: the claim must "
+            "buy at least that much progress."),
     },
     {
         "id": "principle-claim-tempo",

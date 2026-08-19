@@ -50,15 +50,30 @@ export function tileFace(id: number): TileFace {
 }
 
 // Bonus tiles render as small chips, not full tiles.
-const FLOWER_GLYPHS = ["梅", "蘭", "菊", "竹", "春", "夏", "秋", "冬"];
+// Flowers are two numbered series — red 1-4 (34-37) and blue 1-4
+// (38-41). The number is the identity: seat 1 (East) matches the two
+// 1-flowers, seat 2 (South) the 2s, and so on (正花 by number).
 const ANIMAL_GLYPHS = ["猫", "鼠", "鸡", "蜈"];
 
 export const isAnimal = (id: number) => id >= 42;
 export const isBonus = (id: number) => id >= 34;
+export const isRedFlower = (id: number) => id >= 34 && id <= 37;
+export const isBlueFlower = (id: number) => id >= 38 && id <= 41;
+
+/** Flower number 1-4 within its series, or 0 for animals. */
+export const flowerNumber = (id: number) =>
+  id >= 34 && id <= 41 ? ((id - 34) % 4) + 1 : 0;
 
 export function bonusGlyph(id: number): string {
   if (id >= 42) return ANIMAL_GLYPHS[id - 42] ?? "?";
-  if (id >= 34) return FLOWER_GLYPHS[id - 34] ?? "?";
+  if (id >= 34) return String(flowerNumber(id));
+  return "?";
+}
+
+export function bonusLabel(id: number): string {
+  if (id >= 42) return ["Cat", "Rat", "Rooster", "Centipede"][id - 42] ?? "?";
+  if (id >= 38) return `Blue ${flowerNumber(id)}`;
+  if (id >= 34) return `Red ${flowerNumber(id)}`;
   return "?";
 }
 

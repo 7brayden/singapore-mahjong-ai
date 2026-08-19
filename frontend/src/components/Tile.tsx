@@ -1,4 +1,4 @@
-import { tileFace, bonusGlyph, isAnimal } from "../tiles";
+import { tileFace, bonusGlyph, bonusLabel, isAnimal, isBlueFlower } from "../tiles";
 import { heat } from "../heat";
 
 export type TileSize =
@@ -39,11 +39,11 @@ export function TileView({ id, size, ring, riverFace, highlightFace, danger, hea
 }
 
 export function BonusChip({ id }: { id: number }) {
+  const kind = isAnimal(id) ? " animal" : isBlueFlower(id) ? " flower-blue"
+             : " flower-red";
   return (
-    <span
-      className={`bonus-chip${isAnimal(id) ? " animal" : ""}`}
-      title={isAnimal(id) ? "Animal" : "Flower"}
-    >
+    <span className={`bonus-chip${kind}`} title={bonusLabel(id)}>
+      {!isAnimal(id) && <span className="flower-mark" aria-hidden>✿</span>}
       {bonusGlyph(id)}
     </span>
   );

@@ -12,7 +12,7 @@ This project builds agents that make that tradeoff, pits them against each other
 
 ## Terminology
 
-If you don't play, here's the jargon used below:
+Refer to the jargon used in this repo below:
 
 | Term | Meaning |
 |---|---|
@@ -412,22 +412,41 @@ Every win is scored as a list of named tai items (`scoring.py`), so the UI can s
 | Rule | Tai |
 |---|---|
 | Self-draw (自摸) | 0 — changes who pays, not the tai |
-| No flowers or animals (无花) | 1 |
-| Matching seat flower / animal | 1 each |
-| All four animals | +1 on top of the four |
-| Complete flower series (一套花) | 1 |
+| Matching seat flower (正花, by number, both colours) | 1 each |
+| Animal | 1 each; all four animals +1 on top |
+| Complete flower series (一台花, all four of one colour) | 1 |
+| All eight flowers (花胡 / robbing the eighth 七抢一) | instant limit win |
 | Dragon triplet / seat wind / prevailing wind | 1 each |
-| Kong replacement win (杠上开花) / robbing the kong (抢杠) / last tile (海底捞月) | 1 each |
+| Fully concealed + self-drawn win (门清) | 1 |
+| Kong replacement win (杠上开花) / flower replacement win (花上) / robbing the kong (抢杠) / last tile (海底捞月, not via a replacement draw) | 1 each |
 | All triplets (碰碰胡) | 2 |
 | Half flush (混一色) | 2 |
-| Little three dragons (小三元) | +2 over the dragon pongs |
+| Mixed terminals (混老头, stacks with all triplets) | 2 |
+| Little three dragons (小三元, over the two dragon pongs) | +1 |
+| Small four winds (小四喜, wind tai stack on top) | 2 |
 | Full flush (清一色) | 4 |
-| Ping Hu — all chows, non-honor pair, zero bonus tiles (平胡) | 4 |
-| Chou ping hu — same shape but holding flowers/animals (臭平胡) | 1 |
-| Concealed ping hu — either variant with no claimed melds (门清平胡) | +1 |
-| Big three dragons, four winds, all honors, all terminals | limit (6 by default) |
+| Ping Hu — all chows, zero bonus tiles (平胡) | 4 |
+| Chou ping hu — same shape holding flowers/animals (臭平胡) | 1 |
+| Big three dragons · four great winds · all honors · pure terminals · hidden treasure (四暗刻) · nine gates (九连宝灯) · kong-on-kong (杠杠胡) · eighteen arhats · heavenly/earthly/humanly hands | limit (6 by default) |
+| Thirteen wonders (十三幺) | limit, **everyone pays double** |
 
-House rules live in `ScoreConfig` and are all adjustable: minimum 1 tai to win (chicken hands blocked — confirmed table rule), shooter pays all three shares on a ron, tsumo collects from everyone. Self-draw adds **no tai** at this table — its reward is collecting from all three players, a payment-structure edge the advisor will weight when payouts return. Accounting is **tai-only for now**: instant chip payouts for animals, flower series, and kongs are off by default (the machinery remains one config flag away). Special hands (thirteen orphans, heaven/earth wins) are not yet implemented.
+**Ping hu fine print (per the reference rules):** the pair may be any suited
+tile or a wind that is neither your seat nor the prevailing wind; winning by
+discard requires a wait of **two or more tiles** — an edge, middle, or pair
+wait earns ping hu only on self-draw, and a hand with all four chows claimed
+can never score it.
+
+House rules live in `ScoreConfig` and are all adjustable: minimum 1 tai to
+win (chicken hands blocked), shooter pays all three shares on a ron, tsumo
+collects from everyone. Self-draw adds **no tai** — its rewards are the wider
+payout, plus the two tai gates it opens (门清, single-wait ping hu).
+Accounting is **tai-only for now**: instant chip payouts for animals, flower
+series, and kongs are off by default (the machinery remains one config flag
+away). Thirteen wonders may rob even a concealed kong; eight flowers ends the
+hand the moment the eighth is drawn, from either the drawer's rack (花胡) or
+by the player holding seven (七抢一, drawer pays as shooter). Scoring follows
+the standard Singapore reference rules (Wikipedia's Singaporean Mahjong
+scoring rules) with this table's confirmed house choices on top.
 
 **Wall mechanics.** Normal turn draws come off the front of the wall; replacement draws — after a flower, an animal, or a kong — come off the back, as at a real table. The hand ends in a draw when 15 live tiles remain, regardless of which end they left from. East (the dealer) always draws first.
 
@@ -623,7 +642,6 @@ explanations bill one account.
 
 ## Future work
 
-- Special hands: thirteen orphans, heaven/earth wins
 - Post-game review screen ("Review game with coach") over a hand event log
 - Multi-hand browser sessions backed by session.py (dealer rotation in the UI)
 - Per-user LLM billing before any public deployment (see The coach, below)

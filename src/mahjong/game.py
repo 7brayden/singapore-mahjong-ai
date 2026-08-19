@@ -32,9 +32,12 @@ from mahjong.tiles import (
     is_numbered, suit_of, rank_of, possible_chow_partners,
     WIND_START, FLOWER_START, ANIMAL_START
 )
-from mahjong.hand import Hand, calculate_shanten, is_winning_hand
+from mahjong.hand import (
+    Hand, calculate_shanten, is_winning_hand, is_thirteen_wonders,
+)
 from mahjong.scoring import (
-    ScoreConfig, HandScore, score_win, is_legal_win, compute_win_payments
+    ScoreConfig, HandScore, TaiItem, score_win, is_legal_win,
+    compute_win_payments, _finalize,
 )
 
 # Singapore Mahjong: game ends in a draw when 15 tiles remain in the wall.
@@ -236,6 +239,18 @@ class GameState:
         # (meets the minimum tai requirement).
         self.deal_ins: List[int] = [0, 0, 0, 0]
 
+        # Rules bookkeeping (PDF scoring):
+        # 花上 — did the most recent draw chain pass through a bonus
+        # replacement? 杠杠胡 — consecutive kong replacements in the
+        # current action chain. 天/地/人胡 — first-go-around state.
+        # 花胡 — instant eight-flowers win discovered during a draw.
+        self._last_draw_had_flower: bool = False
+        self._kong_streak: int = 0
+        self.total_discards: int = 0
+        self.draws_made: List[int] = [0, 0, 0, 0]
+        self.melds_formed: int = 0
+        self._flower_win: Optional[Tuple[int, Optional[int]]] = None
+
     def seat_index(self, player_idx: int) -> int:
         """Seat relative to the dealer: 0 = East (dealer), 1 = South, ..."""
         return (player_idx - self.dealer) % 4
@@ -291,6 +306,7 @@ class GameState:
         Returns the final standard tile added, or None if wall exhausted.
         """
         take_back = from_back
+        self._last_draw_had_flower = False
         while True:
             tile = self._draw_replacement() if take_back else self._draw_tile()
             if tile is None:
@@ -300,11 +316,53 @@ class GameState:
             if is_flower:
                 # Bonus tile — set aside, pay instant bonus, then the
                 # replacement comes off the back of the wall.
+                self._last_draw_had_flower = True
                 self._apply_instant_bonus(player_idx, tile)
+                self._check_eight_flowers(player_idx, tile)
                 take_back = True
                 continue
             else:
                 return tile
+
+    # All 8 series flowers (F1-F4 red, F5-F8 blue); animals don't count.
+    _EIGHT_FLOWERS = frozenset(range(FLOWER_START, FLOWER_START + 8))
+
+    def _check_eight_flowers(self, drawer: int, tile: int) -> None:
+        """花胡 / 七抢一 (PDF): all 8 flowers is an instant limit win.
+
+        If the drawer completes 8, they win outright. If another player
+        already holds 7 and the drawer pulls their 8th, that player
+        "robs" it (七抢一) and the drawer pays as shooter. The hidden
+        hand is irrelevant — the win stands on the flowers alone.
+        """
+        if self._flower_win is not None or tile not in self._EIGHT_FLOWERS:
+            return
+        if self._EIGHT_FLOWERS <= set(self.hands[drawer].flowers):
+            self._flower_win = (drawer, None)
+            return
+        for q in range(4):
+            if q == drawer:
+                continue
+            missing = self._EIGHT_FLOWERS - set(self.hands[q].flowers)
+            if missing == {tile}:
+                # Robbing the Eighth: the flower counts as won by q.
+                self.hands[drawer].flowers.remove(tile)
+                self.hands[q].flowers.append(tile)
+                self._flower_win = (q, drawer)
+                return
+
+    def _settle_flower_win(self) -> bool:
+        """End the game on a pending eight-flowers win. Returns True if
+        the game ended here."""
+        if self._flower_win is None:
+            return False
+        winner, shooter = self._flower_win
+        items = [TaiItem("eight_flowers",
+                         self.score_config.tai_for("eight_flowers"))]
+        score = _finalize(items, self.score_config)
+        self._end_game(winner=winner, win_type="flowers",
+                       dealt_in_by=shooter, score=score, win_tile=None)
+        return True
 
     def _apply_instant_bonus(self, player_idx: int, tile: int):
         """Instant payouts for bonus tiles (house rule, on by default).
@@ -453,13 +511,18 @@ class GameState:
             hand.tiles.remove(tile_id)
             hand.tiles.remove(tile_id)
             hand.add_exposed_meld("pong", [tile_id, tile_id, tile_id])
+            self.melds_formed += 1
 
         elif claim_type == "kong":
             # Remove 3 copies, form the kong, draw a replacement tile.
             # The replacement may win the hand (kong draw).
             hand.declare_kong("exposed", tile_id)
+            self.melds_formed += 1
             self._apply_kong_payout(claimer, "exposed")
+            self._kong_streak = 1
             replacement = self._deal_tile_to(claimer, from_back=True)
+            if self._settle_flower_win():
+                return None
             if replacement is None:
                 self._end_game(winner=None, win_type=None)
                 return None
@@ -473,6 +536,7 @@ class GameState:
                 hand.tiles.remove(p_tile)
             meld_tiles = sorted([tile_id] + partners)
             hand.add_exposed_meld("chow", meld_tiles)
+            self.melds_formed += 1
 
         # After a claim the claimer effectively holds one tile too many
         # (2 concealed tiles left for a 3-tile meld) and must discard.
@@ -486,6 +550,8 @@ class GameState:
             )
 
         hand.discard(discard_tile)
+        self.total_discards += 1
+        self._kong_streak = 0
         return discard_tile
 
     def _try_tsumo(self, p: int, win_tile: int, is_kong_draw: bool) -> bool:
@@ -493,9 +559,21 @@ class GameState:
         hand = self.hands[p]
         if not is_winning_hand(hand.counts, hand.num_exposed_melds):
             return False
+        # 天胡: the dealer completes on their very first draw, before
+        # any discard. 地胡 (scenario 2): a non-dealer completes on
+        # their own first draw of the game.
+        first_turn = None
+        if self.total_discards == 0 and self.melds_formed == 0 and p == self.dealer:
+            first_turn = "heavenly"
+        elif (p != self.dealer and self.draws_made[p] == 1
+              and self.total_discards < 4 and self.melds_formed == 0):
+            first_turn = "earthly"
         score = score_win(hand, win_tile, True, self.seat_index(p),
                           self.prevailing_wind, self.score_config,
                           is_kong_draw=is_kong_draw,
+                          is_flower_draw=self._last_draw_had_flower,
+                          is_kong_on_kong=is_kong_draw and self._kong_streak >= 2,
+                          first_turn_flag=first_turn,
                           is_last_tile=self.tiles_remaining <= DEAD_WALL_SIZE)
         if score is not None and is_legal_win(score, self.score_config):
             self._end_game(winner=p, win_type="tsumo", score=score,
@@ -547,16 +625,51 @@ class GameState:
                                    dealt_in_by=p, score=score,
                                    win_tile=tile_id)
                     return False
+            elif kind == "concealed":
+                # 十三幺 is the ONLY hand that may rob a concealed kong.
+                rob = self._check_orphan_kong_rob(p, tile_id)
+                if rob is not None:
+                    return False
 
             hand.declare_kong(kind, tile_id)
             self._apply_kong_payout(p, kind)
+            self._kong_streak += 1
 
             replacement = self._deal_tile_to(p, from_back=True)
+            if self._settle_flower_win():
+                return False
             if replacement is None:
                 self._end_game(winner=None, win_type=None)
                 return False
             if self._try_tsumo(p, replacement, is_kong_draw=True):
                 return False
+
+    def _check_orphan_kong_rob(self, declarer: int, tile_id: int):
+        """Thirteen Wonders may rob a concealed kong (PDF special rule).
+        Ends the game and returns the winner, or None."""
+        for offset in range(1, 4):
+            opp = (declarer + offset) % 4
+            opp_hand = self.hands[opp]
+            if opp_hand.num_exposed_melds != 0:
+                continue
+            opp_hand.counts[tile_id] += 1
+            wins = is_thirteen_wonders(opp_hand.counts)
+            if wins:
+                score = score_win(opp_hand, tile_id, False,
+                                  self.seat_index(opp),
+                                  self.prevailing_wind, self.score_config,
+                                  is_rob_kong=True)
+            opp_hand.counts[tile_id] -= 1
+            if wins and score is not None and is_legal_win(
+                    score, self.score_config):
+                self.deal_ins[declarer] += 1
+                self.hands[declarer].remove_tile(tile_id)
+                opp_hand.add_tile(tile_id)
+                self._end_game(winner=opp, win_type="ron",
+                               dealt_in_by=declarer, score=score,
+                               win_tile=tile_id)
+                return opp
+        return None
 
     def _execute_turn(self) -> bool:
         """Execute one turn. Returns True if game continues, False if over."""
@@ -564,7 +677,11 @@ class GameState:
         hand = self.hands[p]
 
         # 1. Draw
+        self._kong_streak = 0
         drawn = self._deal_tile_to(p)
+        self.draws_made[p] += 1
+        if self._settle_flower_win():
+            return False
         if drawn is None:
             self._end_game(winner=None, win_type=None)
             return False
@@ -591,6 +708,8 @@ class GameState:
 
         # 4. Discard
         hand.discard(discard_tile)
+        self.total_discards += 1
+        self._kong_streak = 0
 
         # 5. Resolve claims on the discard (ron > kong/pong > chow,
         #    repeating for each claimer's follow-up discard)
@@ -611,12 +730,23 @@ class GameState:
         for offset in range(1, 4):
             opponent = (discarder + offset) % 4
             opp_hand = self.hands[opponent]
+            # 地胡: ron on the dealer's very first discard. 人胡: any
+            # ron before the winner's own first draw, no claimed melds
+            # formed by anyone (concealed kongs excepted by rule; the
+            # engine counts only claimed melds here).
+            first_turn = None
+            if self.melds_formed == 0 and opponent != self.dealer:
+                if discarder == self.dealer and self.total_discards == 1:
+                    first_turn = "earthly"
+                elif self.draws_made[opponent] == 0:
+                    first_turn = "humanly"
             opp_hand.counts[tile_id] += 1
             if is_winning_hand(opp_hand.counts, opp_hand.num_exposed_melds):
                 score = score_win(opp_hand, tile_id, False,
                                   self.seat_index(opponent),
                                   self.prevailing_wind, self.score_config,
                                   is_rob_kong=is_rob_kong,
+                                  first_turn_flag=first_turn,
                                   is_last_tile=is_last_tile)
                 if score is not None and is_legal_win(score, self.score_config):
                     if winner is None:
@@ -711,6 +841,8 @@ class GameState:
         """
         if not self.wall:
             self.setup()
+        if self._settle_flower_win():
+            return self.result
         while not self.game_over and self.turn < max_turns:
             keep_going = yield from self._execute_turn()
             if not keep_going:

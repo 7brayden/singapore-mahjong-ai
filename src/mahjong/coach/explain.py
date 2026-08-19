@@ -49,7 +49,7 @@ MAX_OUTPUT_TOKENS = 2000
 
 SYSTEM_PROMPT = """You are the table coach for a Singapore mahjong training app. You explain one decision to the player, using ONLY the numbers in the SITUATION JSON — never invent probabilities, values, or tile facts. The engine's recommendation is given; explain the trade-off behind it, including what the tempting alternative costs. You advise the player; you do not defend the bot.
 
-House rules at this table (already reflected in the numbers): tai cap 6, minimum 1 tai to win (no chicken hands), self-draw adds no tai (it only makes all three opponents pay), shooter pays all three shares on a ron, ping hu 4 tai only with zero bonus tiles (with any flower/animal it is chou ping hu, 1 tai; +1 if concealed), each seat flower or animal 1 tai, all four animals +1.
+House rules at this table (already reflected in the numbers): tai cap 6, minimum 1 tai to win (no chicken hands), self-draw adds no tai (it only makes all three opponents pay), shooter pays all three shares on a ron, ping hu 4 tai only with zero bonus tiles AND a wait of two or more tiles when winning by discard (a single wait earns ping hu only on self-draw; with any flower/animal the shape is chou ping hu, 1 tai), 门清 +1 for a fully concealed hand won by self-draw, each seat flower or animal 1 tai, all four animals +1.
 
 The situation's tai_context lines come from the scoring engine and are authoritative for THIS hand: they state which tai tracks are live, degraded, or dead right now. Never advise pursuing a track tai_context marks unavailable — in particular, if it says ping hu is degraded to chou ping hu, do not present ping hu (4 tai) as this hand's goal.
 
@@ -77,25 +77,23 @@ def _tai_context(hand, seat_index: int) -> List[str]:
         banked = _bonus_tai(flowers, seat_index)
         notes.append(
             f"You hold {len(flowers)} bonus tile(s) banking {banked} tai. "
-            "Ping hu (4 tai) and 无花 (1 tai) are OFF the table this hand: "
-            "an all-chows hand now scores chou ping hu (1 tai"
-            + (", +1 while concealed" if concealed else "") + ").")
+            "Ping hu (4 tai) is OFF the table this hand: an all-chows "
+            "hand now scores chou ping hu (1 tai).")
     if has_pong_meld:
         notes.append(
             "An exposed pong/kong means this hand can never be all chows — "
             "the ping hu / chou ping hu track is dead; value must come from "
             "triplets, flush, honors, or bonus tiles.")
     elif not flowers:
-        if concealed:
-            notes.append(
-                "Clean concealed ping hu (4 tai, +1 concealed) is still "
-                "live — it dies the moment you draw any flower/animal or "
-                "claim a meld.")
-        else:
-            notes.append(
-                "Clean ping hu (4 tai) is still live but the concealed +1 "
-                "is already spent; drawing any flower/animal drops it to "
-                "chou ping hu (1 tai).")
+        notes.append(
+            "Clean ping hu (4 tai) is still live — it dies the moment you "
+            "draw any flower/animal. To win it by discard you must end on "
+            "a wait of two or more tiles; a single wait only scores ping "
+            "hu on self-draw.")
+    if concealed:
+        notes.append(
+            "Fully concealed: winning by SELF-DRAW adds 门清 (+1 tai). "
+            "Claiming any pong or chow forfeits it.")
     return notes
 
 

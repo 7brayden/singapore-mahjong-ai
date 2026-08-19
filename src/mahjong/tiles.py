@@ -81,7 +81,11 @@ def tile_name(tile_id: int) -> str:
     elif 31 <= tile_id <= 33:
         return f"{DRAGON_NAMES[tile_id - 31]} Dragon"
     elif 34 <= tile_id <= 41:
-        return f"Flower {tile_id - 33}"
+        # Two numbered series: Red 1-4 (34-37), Blue 1-4 (38-41).
+        # The number is what matters — seat N's 正花 is the two
+        # N-flowers of either colour.
+        n = tile_id - FLOWER_START
+        return f"{'Red' if n < 4 else 'Blue'} Flower {(n % 4) + 1}"
     elif 42 <= tile_id <= 45:
         return ANIMAL_NAMES[tile_id - 42]
     else:

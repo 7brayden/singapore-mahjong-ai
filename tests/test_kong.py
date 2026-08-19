@@ -139,9 +139,13 @@ def test_added_kong_can_be_robbed():
     game.hands[1].add_exposed_meld("pong", [11, 11, 11])
     for t in [11, 0, 4, 8, 15, 17, 20, 24, 28, 32]:
         game.hands[1].add_tile(t)
-    # P2: pure ping-hu shape waiting on 3t (1t2t + 5s pair + three runs)
+    # P2: ping-hu shape waiting on 3t — but 1t2t is an EDGE wait, and
+    # per the PDF a single-wait ping hu robbed from a kong scores only
+    # the rob itself (平胡 not in effect). The win still needs 1 tai,
+    # which rob_kong provides.
     for t in [0, 1, 2, 3, 4, 5, 6, 7, 8, 22, 22, 9, 10]:
         game.hands[2].add_tile(t)
+    game.draws_made = [1, 1, 1, 1]  # mid-game, not a first-turn hand
 
     assert run_decision(game, game._execute_turn()) is False
     assert game.result.winner == 2
@@ -149,7 +153,7 @@ def test_added_kong_can_be_robbed():
     assert game.result.dealt_in_by == 1
     rules = [item.rule for item in game.result.winning_score.items]
     assert "rob_kong" in rules
-    assert "ping_hu" in rules
+    assert "ping_hu" not in rules  # PDF: single-wait 平胡 cannot be robbed in
     assert game.deal_ins[1] == 1
     # The robbed tile moved from P1's hand to P2's
     assert game.hands[1].counts[11] == 0

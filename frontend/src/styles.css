@@ -217,13 +217,19 @@ button:focus-visible, input:focus-visible {
 
 .bonus-chip {
   width: 19px; height: 23px; border-radius: 3px;
+  display: inline-flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 0;
+  font-family: "DM Mono", monospace; font-size: 9.5px; font-weight: 600;
+  line-height: 1;
+  background: rgba(251, 247, 236, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+.bonus-chip .flower-mark { font-size: 7.5px; line-height: 1; }
+.bonus-chip.flower-red  { color: #b5443a; }
+.bonus-chip.flower-blue { color: #3a6ea8; }
+.bonus-chip.animal {
   display: grid; place-items: center;
   font-family: "Noto Sans SC", sans-serif; font-size: 10px;
-  background: rgba(251, 247, 236, 0.9);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  color: #2f7d52;
-}
-.bonus-chip.animal {
   background: rgba(232, 172, 61, 0.9);
   border-color: rgba(255, 255, 255, 0.35);
   color: #3a2708;

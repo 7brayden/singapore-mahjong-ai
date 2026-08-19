@@ -31,10 +31,16 @@ export function GameEnd({ view, result, displayNames, handNumber,
   const title = isDraw
     ? "Draw — wall exhausted"
     : `${humanWon ? "You win" : `${winnerName} wins`} — ${
-        result.win_type === "tsumo" ? "self-draw" : "off a discard"}`;
+        result.win_type === "tsumo" ? "self-draw"
+        : result.win_type === "flowers" ? "eight flowers 花胡"
+        : "off a discard"}`;
 
   const sub = isDraw
     ? "The live wall ran out with nobody ready to claim a win. No tai are scored on a draw."
+    : result.win_type === "flowers"
+      ? (result.dealt_in_by !== null
+          ? `Robbed the eighth flower from ${displayNames[result.dealt_in_by]} (七抢一) — an instant limit win on the flowers alone`
+          : "Collected all eight flowers — an instant limit win, whatever the hand held")
     : result.win_type === "tsumo"
       ? `Drew ${winTileFace?.label ?? "the winning tile"} from the wall on turn ${result.turns} · 自摸 pays from all three`
       : `Took ${result.dealt_in_by !== null ? displayNames[result.dealt_in_by] : "a"}${

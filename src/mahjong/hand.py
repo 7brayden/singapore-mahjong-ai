@@ -383,27 +383,74 @@ def best_chow_option(counts: List[int], num_exposed_melds: int,
 # WIN CHECKING
 # ══════════════════════════════════════════════════════════════════════
 
+# The 13 tile kinds of Thirteen Wonders (十三幺): every terminal + every
+# honor. A fully concealed hand of one of each plus a pair of any of
+# them is a winning hand outside the 4-melds-plus-pair shape.
+ORPHAN_TILES = tuple(
+    t for t in range(NUM_STANDARD_UNIQUE)
+    if is_honor(t) or (is_numbered(t) and rank_of(t) in (1, 9)))
+
+
+def is_thirteen_wonders(counts: List[int], num_exposed_melds: int = 0) -> bool:
+    """14 concealed tiles: one of each orphan kind, one of them paired."""
+    if num_exposed_melds != 0 or sum(counts) != 14:
+        return False
+    pair_seen = False
+    for t in range(NUM_STANDARD_UNIQUE):
+        c = counts[t]
+        if t in ORPHAN_TILES:
+            if c == 0 or c > 2:
+                return False
+            if c == 2:
+                if pair_seen:
+                    return False
+                pair_seen = True
+        elif c:
+            return False
+    return pair_seen
+
+
+def thirteen_wonders_waits(counts: List[int]) -> List[int]:
+    """Tiles that complete Thirteen Wonders from a 13-tile concealed hand."""
+    if sum(counts) != 13:
+        return []
+    waits = []
+    for t in ORPHAN_TILES:
+        counts[t] += 1
+        if is_thirteen_wonders(counts):
+            waits.append(t)
+        counts[t] -= 1
+    return waits
+
+
 def is_winning_hand(counts: List[int], num_exposed_melds: int = 0) -> bool:
     """Check if the concealed tiles + exposed melds form a complete hand.
 
-    A complete hand has shanten = -1, i.e., 4 melds + 1 pair total.
+    A complete hand has shanten = -1 (4 melds + 1 pair total), or —
+    fully concealed only — the Thirteen Wonders pattern.
     """
-    return calculate_shanten(counts, num_exposed_melds) == -1
+    if calculate_shanten(counts, num_exposed_melds) == -1:
+        return True
+    return is_thirteen_wonders(counts, num_exposed_melds)
 
 
 def get_winning_tiles(counts: List[int], num_exposed_melds: int = 0) -> List[int]:
-    """If tenpai (shanten=0), return which tiles complete the hand."""
-    if calculate_shanten(counts, num_exposed_melds) != 0:
-        return []
-
+    """All tiles that would complete the hand (standard shapes and,
+    for fully concealed hands, Thirteen Wonders)."""
     winning = []
-    for tile_id in range(NUM_STANDARD_UNIQUE):
-        if counts[tile_id] >= 4:
-            continue
-        counts[tile_id] += 1
-        if is_winning_hand(counts, num_exposed_melds):
-            winning.append(tile_id)
-        counts[tile_id] -= 1
+    if calculate_shanten(counts, num_exposed_melds) == 0:
+        for tile_id in range(NUM_STANDARD_UNIQUE):
+            if counts[tile_id] >= 4:
+                continue
+            counts[tile_id] += 1
+            if calculate_shanten(counts, num_exposed_melds) == -1:
+                winning.append(tile_id)
+            counts[tile_id] -= 1
+    if num_exposed_melds == 0:
+        for t in thirteen_wonders_waits(counts):
+            if t not in winning:
+                winning.append(t)
+        winning.sort()
     return winning
 
 
