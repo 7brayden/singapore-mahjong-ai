@@ -51,7 +51,7 @@ SYSTEM_PROMPT = """You are the table coach for a Singapore mahjong training app.
 
 House rules at this table (already reflected in the numbers): tai cap 6, minimum 1 tai to win (no chicken hands), self-draw adds no tai (it only makes all three opponents pay), shooter pays all three shares on a ron, ping hu 4 tai only with zero bonus tiles AND a wait of two or more tiles when winning by discard (a single wait earns ping hu only on self-draw; with any flower/animal the shape is chou ping hu, 1 tai), 门清 +1 for a fully concealed hand won by self-draw, each seat flower or animal 1 tai, all four animals +1.
 
-The situation's tai_context lines come from the scoring engine and are authoritative for THIS hand: they state which tai tracks are live, degraded, or dead right now. Never advise pursuing a track tai_context marks unavailable — in particular, if it says ping hu is degraded to chou ping hu, do not present ping hu (4 tai) as this hand's goal.
+The situation's claim_consequence and tai_context lines come from the scoring engine and are authoritative for THIS hand: they state which tai tracks are live, degraded, or dead right now. Never advise pursuing a track tai_context marks unavailable — in particular, if it says ping hu is degraded to chou ping hu, do not present ping hu (4 tai) as this hand's goal.
 
 Reply in at most 110 words of plain second-person prose. No headers, no lists. Weave in at most two numbers from the situation. End with: Principle: <the one retrieved principle title that best fits>."""
 
@@ -134,6 +134,36 @@ def _tai_context(hand, seat_index: int, prevailing_wind: int = None) -> List[str
     return notes
 
 
+def _claim_consequence_for(game, seat: int,
+                           pending: Optional[Dict]) -> Optional[Dict]:
+    """Engine-computed tai consequence of the pending claim, if any.
+
+    Fixes an observed coaching gap: _tai_context describes the hand as
+    it stands, so for a claim window the coach knew ping hu was live
+    but not that TAKING THE CLAIM would kill it. This states the
+    hypothetical outright; its headline is prepended to tai_context so
+    every narration leads with the consequence.
+    """
+    if not pending or pending.get("type") not in ("claim", "chow"):
+        return None
+    from mahjong.tai_track import claim_consequence
+    tile = pending.get("tile")
+    if tile is None:
+        return None
+    if pending["type"] == "chow":
+        options = pending.get("options") or []
+        if not options:
+            return None
+        partners = tuple(options[0])
+        claim_type = "chow"
+    else:
+        partners = None
+        claim_type = pending.get("claim_type", "pong")
+    return claim_consequence(game.hands[seat], game.seat_index(seat),
+                             game.prevailing_wind, game.score_config,
+                             tile, claim_type, partners=partners)
+
+
 def build_situation(game, seat: int, pending: Optional[Dict],
                     suggestion_text: Optional[str]) -> Dict:
     hand = game.hands[seat]
@@ -167,6 +197,7 @@ def build_situation(game, seat: int, pending: Optional[Dict],
 
     opp_melds = sum(game.hands[p].num_exposed_melds
                     for p in range(4) if p != seat)
+    consequence = _claim_consequence_for(game, seat, pending)
     situation = {
         "pending_type": pending.get("type") if pending else None,
         "pending": pending,
@@ -183,8 +214,12 @@ def build_situation(game, seat: int, pending: Optional[Dict],
         "turn": game.turn,
         "tiles_remaining": game.tiles_remaining,
         # derived flags (retrieval + prompt context)
-        "tai_context": _tai_context(hand, game.seat_index(seat),
-                                    game.prevailing_wind),
+        "tai_context": (([consequence["headline"]]
+                         if consequence and consequence.get("headline")
+                         else [])
+                        + _tai_context(hand, game.seat_index(seat),
+                                       game.prevailing_wind)),
+        "claim_consequence": consequence,
         "is_concealed": hand.num_exposed_melds == 0,
         "has_bonus_tiles": bool(hand.flowers),
         "flush_track": total > 0 and (biggest + honors) / total >= 0.7,

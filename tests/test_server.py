@@ -185,3 +185,30 @@ def test_next_hand_refused_mid_hand():
     managed = GameManager().create(seed=6)
     with _pytest.raises(RuntimeError):
         managed.next_hand()
+
+
+def test_hint_claim_context_and_headline():
+    """The /hint machinery attaches engine tai facts to claim windows,
+    and the one-liner carries the consequence — no fabricated reasons."""
+    from mahjong.game import GameState, ClaimRequest
+    from mahjong.agents import GreedyAgent
+    from mahjong.hand import Hand
+    from mahjong.server.app import _claim_context, _suggestion_text
+
+    game = GameState([GreedyAgent(f"G{i}") for i in range(4)], seed=0)
+    game.wall = [0] * 60
+    hand = Hand()
+    # The reproduction hand: clean concealed ping hu track, 5s pair
+    for t in [1, 2, 3, 4, 8, 12, 15, 19, 20, 21, 22, 22, 24]:
+        hand.add_tile(t)
+    game.hands[0] = hand
+
+    request = ClaimRequest(0, 22, "pong")
+    ctx = _claim_context(game, request, False)
+    assert ctx is not None
+    assert ctx["dead_after"] is True
+    assert ctx["kills_pinghu"] is True
+
+    text = _suggestion_text(request, False, game=game)
+    assert "pass" in text
+    assert "cannot win" in text  # the engine's consequence, attached

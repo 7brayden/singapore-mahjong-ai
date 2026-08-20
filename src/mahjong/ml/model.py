@@ -155,13 +155,19 @@ class CompositeValueModel:
             }, f, indent=2)
             f.write("\n")
 
+    def predict_components(self, x: List[float]) -> tuple:
+        """(p_win, e_win, p_pay, e_pay) — the four numbers predict()
+        multiplies. Exposed so the decision layer can clamp the win
+        term with engine-truth tai arithmetic (see agents/learned)."""
+        return (self.win.predict(x),
+                max(0.0, self.win_size.predict(x)),
+                self.pay.predict(x),
+                max(0.0, self.pay_size.predict(x)))
+
     def predict(self, x: List[float]) -> float:
         """Expected net points. Magnitudes are clamped at zero — a
         ridge extrapolating a negative 'size of the win' is noise."""
-        p_win = self.win.predict(x)
-        p_pay = self.pay.predict(x)
-        e_win = max(0.0, self.win_size.predict(x))
-        e_pay = max(0.0, self.pay_size.predict(x))
+        p_win, e_win, p_pay, e_pay = self.predict_components(x)
         return p_win * e_win - p_pay * e_pay
 
 

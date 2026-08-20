@@ -144,8 +144,19 @@ export const postNextHand = (gameId: string) =>
 export const postAction = (gameId: string, answer: unknown) =>
   request<GameView>("POST", `/games/${gameId}/action`, { answer });
 
+export interface ClaimContext {
+  kills_pinghu: boolean;
+  forfeits_menqing: boolean;
+  tai_ceiling_before: number;
+  tai_ceiling_after: number;
+  dead_after: boolean;
+  /** Engine-written consequence sentence, or null when unremarkable. */
+  headline: string | null;
+}
+
 export const getHint = (gameId: string) =>
-  request<{ pending: PendingView; suggestion: unknown }>("GET", `/games/${gameId}/hint`);
+  request<{ pending: PendingView; suggestion: unknown; claim_context?: ClaimContext }>(
+    "GET", `/games/${gameId}/hint`);
 
 export const getAnalysis = (gameId: string) =>
   request<Analysis>("GET", `/games/${gameId}/analysis`);

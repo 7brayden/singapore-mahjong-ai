@@ -47,6 +47,16 @@ class HybridAgent(BaseAgent):
         if current_shanten > self.CLAIM_SHANTEN_LIMIT:
             return False
 
+        # Engine-truth legality gate (shared with the learned agent):
+        # a shanten drop is worthless if the hand it buys cannot reach
+        # the minimum tai. This also stops the hybrid poisoning
+        # training data with self-ruined ping hu hands.
+        from mahjong.tai_track import claim_kills_hand
+        if claim_kills_hand(hand, game_state.seat_index(player_idx),
+                            game_state.prevailing_wind,
+                            game_state.score_config, tile_id, claim_type):
+            return False
+
         if claim_type == "pong":
             if counts[tile_id] < 2:
                 return False
@@ -100,7 +110,15 @@ class HybridAgent(BaseAgent):
         if current_shanten > self.CLAIM_SHANTEN_LIMIT:
             return None
 
-        best_pair, _ = best_chow_option(counts, hand.num_exposed_melds, options)
+        from mahjong.tai_track import claim_kills_hand
+        live = [opt for opt in options
+                if not claim_kills_hand(
+                    hand, game_state.seat_index(player_idx),
+                    game_state.prevailing_wind, game_state.score_config,
+                    tile_id, "chow", partners=tuple(opt))]
+        if not live:
+            return None
+        best_pair, _ = best_chow_option(counts, hand.num_exposed_melds, live)
         return best_pair
 
     def danger_for(self, tile_id: int, player_idx: int, game_state,

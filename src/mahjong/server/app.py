@@ -27,6 +27,7 @@ from mahjong.game import DiscardRequest, ClaimRequest, ChowRequest, KongRequest
 from mahjong.tiles import NUM_TOTAL_UNIQUE, tile_name, tile_short, suit_of, rank_of
 from mahjong.server.manager import GameManager, BOT_TYPES, ManagedGame
 from mahjong.server.analysis import analyze_seat
+from mahjong.tai_track import claim_consequence
 from mahjong.coach import explain_situation
 
 app = FastAPI(title="Singapore Mahjong AI", version=mahjong.__version__)
@@ -132,17 +133,46 @@ async def next_hand(game_id: str):
 
 @app.get("/games/{game_id}/hint")
 async def hint(game_id: str):
-    """What would the agent seated at the human's position do?"""
+    """What would the agent seated at the human's position do?
+
+    For claim windows the payload carries claim_context: engine-computed
+    facts about what taking the claim does to the hand's tai potential
+    (forfeits ping hu, drops below the minimum, ...). The UI shows these
+    verdict-independently — the engine is the rulebook even when the
+    model is the advisor.
+    """
     managed = _get_or_404(game_id)
     interactive = managed.interactive
     if interactive.pending is None:
         raise HTTPException(409, "No pending decision")
-    suggestion = interactive.game.dispatch_to_agent(interactive.pending)
-    return {
+    pending = interactive.pending
+    suggestion = interactive.game.dispatch_to_agent(pending)
+    payload = {
         "pending": interactive.view_for(managed.human_seat)["pending"],
         "suggestion": list(suggestion) if isinstance(suggestion, tuple)
                       else suggestion,
     }
+    ctx = _claim_context(interactive.game, pending, suggestion)
+    if ctx is not None:
+        payload["claim_context"] = ctx
+    return payload
+
+
+def _claim_context(game, request, suggestion):
+    """Engine tai facts for a claim/chow window (None otherwise)."""
+    if isinstance(request, ClaimRequest):
+        partners = None
+        claim_type = request.claim_type
+    elif isinstance(request, ChowRequest):
+        claim_type = "chow"
+        partners = (tuple(suggestion) if suggestion
+                    else tuple(request.options[0]))
+    else:
+        return None
+    hand = game.hands[request.player]
+    return claim_consequence(hand, game.seat_index(request.player),
+                             game.prevailing_wind, game.score_config,
+                             request.tile_id, claim_type, partners=partners)
 
 
 @app.get("/games/{game_id}/analysis")
@@ -161,23 +191,33 @@ async def analysis(game_id: str):
                         agent_pick=agent_pick)
 
 
-def _suggestion_text(request, suggestion) -> str:
-    """Render the learned advisor's choice as one plain sentence."""
+def _suggestion_text(request, suggestion, game=None) -> str:
+    """Render the learned advisor's choice as one plain sentence —
+    with the engine's tai consequence attached for claim windows."""
     if isinstance(request, DiscardRequest):
         return f"The trained advisor would discard {tile_name(suggestion)}."
-    if isinstance(request, ClaimRequest):
-        verb = f"take the {request.claim_type} of {tile_name(request.tile_id)}"
-        return (f"The trained advisor would {verb}." if suggestion
-                else f"The trained advisor would pass on the "
-                     f"{request.claim_type} of {tile_name(request.tile_id)}.")
-    if isinstance(request, ChowRequest):
-        if suggestion:
-            a, b = suggestion
-            return (f"The trained advisor would chow the "
-                    f"{tile_name(request.tile_id)} with {tile_name(a)} "
-                    f"and {tile_name(b)}.")
-        return (f"The trained advisor would pass on chowing the "
-                f"{tile_name(request.tile_id)}.")
+    if isinstance(request, ClaimRequest) or isinstance(request, ChowRequest):
+        if isinstance(request, ClaimRequest):
+            verb = f"take the {request.claim_type} of {tile_name(request.tile_id)}"
+            noun = f"the {request.claim_type} of {tile_name(request.tile_id)}"
+            if suggestion:
+                text = f"The trained advisor would {verb}."
+            else:
+                text = f"The trained advisor would pass on {noun}."
+        else:
+            if suggestion:
+                a, b = suggestion
+                text = (f"The trained advisor would chow the "
+                        f"{tile_name(request.tile_id)} with {tile_name(a)} "
+                        f"and {tile_name(b)}.")
+            else:
+                text = (f"The trained advisor would pass on chowing the "
+                        f"{tile_name(request.tile_id)}.")
+        if game is not None:
+            ctx = _claim_context(game, request, suggestion)
+            if ctx and ctx.get("headline"):
+                text += f" {ctx['headline']}"
+        return text
     if isinstance(request, KongRequest):
         if suggestion:
             kind, tile = suggestion
@@ -208,7 +248,8 @@ async def explain(game_id: str):
         return cached["payload"]
 
     suggestion = interactive.game.dispatch_to_agent(interactive.pending)
-    text = _suggestion_text(interactive.pending, suggestion)
+    text = _suggestion_text(interactive.pending, suggestion,
+                            game=interactive.game)
     payload = await explain_situation(
         interactive.game, managed.human_seat, pending_view, text)
     managed.explain_cache = {"key": key, "payload": payload}

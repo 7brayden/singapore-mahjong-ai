@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { Explanation, GameView, PendingView } from "../api";
+import type { ClaimContext, Explanation, GameView, PendingView } from "../api";
 import { tileFace, tileShortZh } from "../tiles";
 import { TileView } from "./Tile";
 
@@ -8,6 +8,7 @@ interface ClaimPromptProps {
   pending: PendingView;   // type "claim" or "chow"
   discarderName: string;
   coachLine: string | null;
+  claimContext: ClaimContext | null;
   explanation: Explanation | null;
   explainLoading: boolean;
   onExplain: () => void;
@@ -16,8 +17,8 @@ interface ClaimPromptProps {
 }
 
 export function ClaimPrompt({ view, pending, discarderName, coachLine,
-                              explanation, explainLoading, onExplain,
-                              onClaim, onChow }: ClaimPromptProps) {
+                              claimContext, explanation, explainLoading,
+                              onExplain, onClaim, onChow }: ClaimPromptProps) {
   const tile = pending.tile ?? -1;
   const isChow = pending.type === "chow";
   const claimType = pending.claim_type ?? "pong";
@@ -57,6 +58,16 @@ export function ClaimPrompt({ view, pending, discarderName, coachLine,
           </div>
 
         </div>
+        {claimContext && (claimContext.kills_pinghu || claimContext.dead_after) && (
+          <div className={`tai-cost${claimContext.dead_after ? " dead" : ""}`}>
+            {claimContext.dead_after
+              ? `Taking this leaves no tai in sight — best achievable drops ${
+                  claimContext.tai_ceiling_before} → ${claimContext.tai_ceiling_after
+                }, below the 1-tai minimum. A 0-tai hand cannot win.`
+              : `This forfeits ping hu: best achievable drops ${
+                  claimContext.tai_ceiling_before} → ${claimContext.tai_ceiling_after} tai.`}
+          </div>
+        )}
         <div className="claim-actions">
           {!isChow && (
             <button className="btn-accent" autoFocus onClick={() => onClaim(true)}>

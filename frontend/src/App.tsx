@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Analysis, Explanation, GameView, createGame, getAnalysis, getHint,
+  Analysis, ClaimContext, Explanation, GameView, createGame, getAnalysis, getHint,
   openGameSocket, postAction, postExplain, postNextHand,
 } from "./api";
 import { tileFace } from "./tiles";
@@ -36,6 +36,10 @@ export default function App() {
   const [coachVisible, setCoachVisible] = useState(true);
   const [botBeat, setBotBeat] = useState(false);
   const [claimCoachLine, setClaimCoachLine] = useState<string | null>(null);
+  // Engine-computed tai consequence of the pending claim — rendered on
+  // the claim card verdict-INDEPENDENTLY (the rulebook speaks even
+  // when the advisor is wrong). null between claim windows.
+  const [claimContext, setClaimContext] = useState<ClaimContext | null>(null);
   const [explanation, setExplanation] = useState<Explanation | null>(null);
   const [explainLoading, setExplainLoading] = useState(false);
   // Instant local recommendation shown while the LLM writes its prose
@@ -104,6 +108,7 @@ export default function App() {
       setAnalysis(null);
       explainSeq.current += 1;
       setClaimCoachLine(null);
+      setClaimContext(null);
       setExplanation(null);
       setExplainLoading(false);
       setCoachInterim(null);
@@ -134,6 +139,7 @@ export default function App() {
       setAnalysis(null);
       explainSeq.current += 1;
       setClaimCoachLine(null);
+      setClaimContext(null);
       setExplanation(null);
       setExplainLoading(false);
       setCoachInterim(null);
@@ -159,6 +165,7 @@ export default function App() {
       const next = await postAction(gameId, answer);
       explainSeq.current += 1;
       setClaimCoachLine(null);
+      setClaimContext(null);
       setExplanation(null);
       setExplainLoading(false);
       setCoachInterim(null);
@@ -194,30 +201,35 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameId, pendingKey, coachVisible]);
 
-  const formatHint = useCallback((suggestion: unknown): string => {
+  // The one-liner states the verdict plus, for claims, the ENGINE's
+  // computed consequence. No fabricated rationales: an earlier version
+  // hardcoded "it genuinely improves your hand" onto whatever boolean
+  // the agent returned — asserting a reason nothing had computed.
+  const formatHint = useCallback((suggestion: unknown, ctx?: ClaimContext): string => {
     const pending = view?.pending;
     if (!pending) return "";
+    const consequence = ctx?.headline ? ` ${ctx.headline}` : "";
     if (pending.type === "discard") {
       return typeof suggestion === "number"
         ? `I would discard ${tileFace(suggestion).label} here.`
         : "I would keep the hand as it is.";
     }
     if (pending.type === "claim") {
-      return suggestion
-        ? `I would take the ${pending.claim_type} — it genuinely improves your hand.`
-        : "I would pass. Claiming here exposes your hand without making it faster.";
+      return (suggestion
+        ? `I would take the ${pending.claim_type}.`
+        : `I would pass on the ${pending.claim_type}.`) + consequence;
     }
     if (pending.type === "chow") {
       if (Array.isArray(suggestion)) {
         const [a, b] = suggestion as [number, number];
-        return `I would chow it with ${tileFace(a).label} and ${tileFace(b).label}.`;
+        return `I would chow it with ${tileFace(a).label} and ${tileFace(b).label}.` + consequence;
       }
-      return "I would pass — none of these runs actually help you.";
+      return "I would pass on the chow." + consequence;
     }
     if (pending.type === "kong") {
       if (Array.isArray(suggestion)) {
         const [kind, t] = suggestion as [string, number];
-        return `I would declare the ${kind} kong of ${tileFace(t).label} — the replacement draw is free value.`;
+        return `I would declare the ${kind} kong of ${tileFace(t).label} — the replacement draw comes from the back of the wall.`;
       }
       return "I would hold off — that fourth tile still serves your hand.";
     }
@@ -231,7 +243,10 @@ export default function App() {
     // Stage 1 — the engine's own pick, instantly, so the wait has substance
     getHint(gameId)
       .then((hint) => {
-        if (explainSeq.current === seq) setCoachInterim(formatHint(hint.suggestion));
+        if (explainSeq.current === seq) {
+          setCoachInterim(formatHint(hint.suggestion, hint.claim_context));
+          setClaimContext(hint.claim_context ?? null);
+        }
       })
       .catch(() => undefined);
     // Stage 2 — the full prose read
@@ -255,7 +270,11 @@ export default function App() {
     if (pending.type !== "claim" && pending.type !== "chow") return;
     let stale = false;
     getHint(gameId)
-      .then((hint) => { if (!stale) setClaimCoachLine(formatHint(hint.suggestion)); })
+      .then((hint) => {
+        if (stale) return;
+        setClaimCoachLine(formatHint(hint.suggestion, hint.claim_context));
+        setClaimContext(hint.claim_context ?? null);
+      })
       .catch(() => undefined);
     return () => { stale = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -337,6 +356,7 @@ export default function App() {
       {pending && (pending.type === "claim" || pending.type === "chow") && (
         <ClaimPrompt view={view} pending={pending} discarderName={discarderName}
                      coachLine={coachVisible ? claimCoachLine : null}
+                     claimContext={claimContext}
                      explanation={coachVisible ? explanation : null}
                      explainLoading={coachVisible && explainLoading}
                      onExplain={requestExplanation}

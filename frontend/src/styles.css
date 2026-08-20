@@ -228,6 +228,20 @@ button:focus-visible, input:focus-visible {
 .standing-pts { font-family: "DM Mono", monospace; color: var(--text-secondary); }
 .standing-note { margin-top: 6px; font-size: 11.5px; color: var(--text-muted); }
 
+.tai-cost {
+  margin: 2px 0 8px;
+  padding: 7px 11px; border-radius: 8px;
+  font-size: 12px; line-height: 1.45;
+  background: rgba(214, 172, 71, 0.12);
+  border: 1px solid rgba(214, 172, 71, 0.4);
+  color: var(--accent-tint-text);
+}
+.tai-cost.dead {
+  background: rgba(198, 86, 75, 0.12);
+  border-color: rgba(198, 86, 75, 0.5);
+  color: var(--danger-text);
+}
+
 /* ── Bonus chips ───────────────────────────────────────────────────── */
 
 .bonus-chip {

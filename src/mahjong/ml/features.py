@@ -168,22 +168,9 @@ OUTCOME_FEATURES = [
 _TRIPLET_PROG = {0: 0.0, 1: 0.15, 2: 0.5, 3: 1.0, 4: 1.0}
 
 
-def _bonus_tai(flowers: List[int], seat_index: int) -> int:
-    """Tai banked in bonus tiles under this table's rules: seat flowers
-    and animals 1 each, all four animals +1, each complete series +1."""
-    fset = set(flowers)
-    tai = 0
-    for f in fset:
-        if f >= ANIMAL_START:
-            tai += 1
-        elif (f - FLOWER_START) % 4 == seat_index:
-            tai += 1
-    if fset >= set(range(ANIMAL_START, ANIMAL_START + 4)):
-        tai += 1
-    for start in (FLOWER_START, FLOWER_START + 4):
-        if fset >= set(range(start, start + 4)):
-            tai += 1
-    return tai
+# One implementation of banked-bonus arithmetic, shared with the
+# decision layer (tai_track) so training and play can never disagree.
+from mahjong.tai_track import bonus_tai as _bonus_tai
 
 
 def _greedy_runs(counts: List[int]) -> int:

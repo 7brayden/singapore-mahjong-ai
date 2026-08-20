@@ -56,6 +56,9 @@ from mahjong.agents.hybrid_agent import HybridAgent
 from mahjong.hand import calculate_shanten, evaluate_discards, tile_acceptance
 from mahjong.opponent_model import estimate_opponent_threats
 from mahjong.tiles import NUM_STANDARD_UNIQUE
+from mahjong.tai_track import (
+    claim_kills_hand, legal_win_exists, structural_tai_ceiling,
+)
 from mahjong.ml.features import (
     DANGER_FEATURES, OUTCOME_FEATURES, danger_features, outcome_features,
 )
@@ -112,7 +115,42 @@ class LearnedAgent(HybridAgent):
         """Expected net points from the post-discard state."""
         x = outcome_features(player_idx, game_state, counts_after,
                              shanten_after, acceptance, threat_data)
-        return self.value_model.predict(x)
+        return self._clamped_value(
+            x, counts_after, game_state.hands[player_idx].exposed,
+            shanten_after, player_idx, game_state)
+
+    def _clamped_value(self, x: List[float], counts: List[int], exposed,
+                       shanten: int, player_idx: int, game_state) -> float:
+        """V with the engine's tai arithmetic as hard bounds.
+
+        The model's beliefs are kept, but the win term is ZEROED when
+        the state cannot reach the minimum tai (a 0-tai hand cannot
+        legally win — law, not statistics) and CAPPED at the literal
+        maximum payout of its achievable tai. Zero-and-cap only, never
+        add: the model's own pricing is never double-counted. With a
+        monolithic (pre-composite) artifact there are no components to
+        clamp — the claim gate still protects the claim windows.
+        """
+        components = getattr(self.value_model, "predict_components", None)
+        if components is None:
+            return self.value_model.predict(x)
+        p_win, e_win, p_pay, e_pay = components(x)
+        cfg = game_state.score_config
+        hand = game_state.hands[player_idx]
+        seat = game_state.seat_index(player_idx)
+        ceiling = structural_tai_ceiling(
+            counts, exposed, hand.flowers, seat,
+            game_state.prevailing_wind, cfg, shanten=shanten)
+        if ceiling < cfg.min_tai and not cfg.allow_chicken_hand:
+            win_term = 0.0
+        else:
+            cap = 3 * cfg.base_unit * (2 ** (min(ceiling, cfg.tai_cap) - 1))
+            win_term = p_win * min(e_win, cap)
+            if shanten == 0 and not legal_win_exists(
+                    counts, exposed, hand.flowers, seat,
+                    game_state.prevailing_wind, cfg):
+                win_term = 0.0
+        return win_term - p_pay * e_pay
 
     def danger_for(self, tile_id: int, player_idx: int, game_state,
                    threat_data, visible) -> float:
@@ -131,7 +169,8 @@ class LearnedAgent(HybridAgent):
         _, acceptance = tile_acceptance(counts, melds, visible)
         x = outcome_features(player_idx, game_state, counts, shanten,
                              acceptance, threat_data, exposed=exposed)
-        return self.value_model.predict(x)
+        return self._clamped_value(x, counts, exposed, shanten,
+                                   player_idx, game_state)
 
     def _best_discard_ev(self, player_idx: int, game_state,
                          counts: List[int], exposed, threat_data,
@@ -148,7 +187,8 @@ class LearnedAgent(HybridAgent):
             _, acceptance = tile_acceptance(counts, melds, visible)
             x = outcome_features(player_idx, game_state, counts, shanten,
                                  acceptance, threat_data, exposed=exposed)
-            value = self.value_model.predict(x)
+            value = self._clamped_value(x, counts, exposed, shanten,
+                                        player_idx, game_state)
             counts[t] += 1
             p_di = self.deal_in_probability(t, player_idx, game_state,
                                             threat_data, visible)
@@ -165,6 +205,13 @@ class LearnedAgent(HybridAgent):
         counts = hand.copy_counts()
         needed = 2 if claim_type == "pong" else 3
         if counts[tile_id] < needed:
+            return False
+        # Engine-truth legality gate: never trade a structurally alive
+        # hand for one that cannot reach the minimum tai. The value
+        # comparison below only chooses among LEGAL futures.
+        if claim_kills_hand(hand, game_state.seat_index(player_idx),
+                            game_state.prevailing_wind,
+                            game_state.score_config, tile_id, claim_type):
             return False
         visible = game_state.get_visible_counts(player_idx)
         threat_data = estimate_opponent_threats(player_idx, game_state)
@@ -202,6 +249,13 @@ class LearnedAgent(HybridAgent):
         best_pair = None
         best_value = pass_value
         for p1, p2 in options:
+            # Same legality gate per option (a 4th claimed chow can
+            # leave a bare-pair wait that can never score ping hu).
+            if claim_kills_hand(hand, game_state.seat_index(player_idx),
+                                game_state.prevailing_wind,
+                                game_state.score_config, tile_id, "chow",
+                                partners=(p1, p2)):
+                continue
             counts[p1] -= 1
             counts[p2] -= 1
             exposed = list(hand.exposed) + [
