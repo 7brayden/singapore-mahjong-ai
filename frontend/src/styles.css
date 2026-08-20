@@ -476,24 +476,6 @@ button.hand-tile { cursor: default; }
 .claim-titles { flex: 1; }
 .claim-title { font-family: "Newsreader", serif; font-size: 22px; }
 .claim-sub { font-size: 12px; color: var(--on-felt-secondary); margin-top: 4px; }
-.claim-countdown {
-  display: flex; flex-direction: column; gap: 5px; align-items: flex-end;
-  align-self: flex-start; min-width: 92px;
-}
-.cd-text { font-family: "DM Mono", monospace; font-size: 11px; color: var(--text-muted); }
-.cd-text.low { color: var(--danger-text); }
-.cd-text.held { color: var(--accent-tint-text-soft); }
-.cd-track {
-  width: 92px; height: 3px; border-radius: 2px;
-  background: rgba(255, 255, 255, 0.08); overflow: hidden;
-}
-.cd-fill {
-  display: block; width: 100%; height: 100%; border-radius: 2px;
-  background: var(--accent-600);
-  transform-origin: left;
-  transition: transform 1s linear, background-color 0.3s ease;
-}
-.cd-fill.low { background: var(--danger-500); }
 .claim-actions { display: flex; gap: 10px; padding: 16px 22px; }
 .claim-actions button {
   flex: 1; padding: 14px; border-radius: 10px; font-size: 14px;
@@ -930,7 +912,6 @@ button.hand-tile { cursor: default; }
     transition: background-color 0.3s ease;
   }
   .coach-writing { animation: none; opacity: 0.8; }
-  .cd-fill { transition: background-color 0.3s ease; }
 }
 
 /* Screen-reader-only live region */

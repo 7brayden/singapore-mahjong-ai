@@ -1,9 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type { Explanation, GameView, PendingView } from "../api";
 import { tileFace, tileShortZh } from "../tiles";
 import { TileView } from "./Tile";
-
-const AUTO_PASS_SECONDS = 6;
 
 interface ClaimPromptProps {
   view: GameView;
@@ -25,12 +23,6 @@ export function ClaimPrompt({ view, pending, discarderName, coachLine,
   const claimType = pending.claim_type ?? "pong";
   const chowOptions = (isChow ? (pending.options as Array<[number, number]>) : []) ?? [];
   const [selectedChow, setSelectedChow] = useState(0);
-  const [secondsLeft, setSecondsLeft] = useState(AUTO_PASS_SECONDS);
-  const paused = useRef(false);
-  // Asking the coach must never cost you the decision: the timer holds
-  // while an explanation is loading or on screen.
-  const coachHold = useRef(false);
-  coachHold.current = explainLoading || explanation !== null;
 
   const pass = () => (isChow ? onChow(null) : onClaim(false));
 
@@ -45,19 +37,6 @@ export function ClaimPrompt({ view, pending, discarderName, coachLine,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    const timer = setInterval(() => {
-      if (paused.current || coachHold.current) return;
-      setSecondsLeft((s) => s - 1);
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  useEffect(() => {
-    if (secondsLeft <= 0) pass();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [secondsLeft]);
-
   const held = view.hand.filter((t) => t === tile).length;
   const face = tileFace(tile);
   const verb = isChow ? "Chow" : claimType === "kong" ? "Kong" : "Pong";
@@ -67,13 +46,7 @@ export function ClaimPrompt({ view, pending, discarderName, coachLine,
 
   return (
     <div className="felt-scrim">
-      <div
-        className="claim-card"
-        onMouseEnter={() => (paused.current = true)}
-        onMouseLeave={() => (paused.current = false)}
-        onFocusCapture={() => (paused.current = true)}
-        onBlurCapture={() => (paused.current = false)}
-      >
+      <div className="claim-card">
         <div className="claim-header">
           <TileView id={tile} size="prompt" ring="ring-glow" />
           <div className="claim-titles">
@@ -82,23 +55,7 @@ export function ClaimPrompt({ view, pending, discarderName, coachLine,
               {discarderName} discarded it · {holdNote}
             </div>
           </div>
-          <div className="claim-countdown" role="timer" aria-live="polite">
-            {explainLoading || explanation ? (
-              <span className="cd-text held">paused — reading the coach</span>
-            ) : (
-              <>
-                <span className={`cd-text${secondsLeft <= 2 ? " low" : ""}`}>
-                  passes in {Math.max(0, secondsLeft)}s
-                </span>
-                <span className="cd-track" aria-hidden="true">
-                  <span
-                    className={`cd-fill${secondsLeft <= 2 ? " low" : ""}`}
-                    style={{ transform: `scaleX(${Math.max(0, secondsLeft) / AUTO_PASS_SECONDS})` }}
-                  />
-                </span>
-              </>
-            )}
-          </div>
+
         </div>
         <div className="claim-actions">
           {!isChow && (
