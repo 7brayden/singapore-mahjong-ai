@@ -124,7 +124,9 @@ function CenterPod({ view, pillLabel, yourTurn, thinking, dealerName }: CenterPo
       <div className="round-row">
         <span className="round-glyph">{seatChar(view.prevailing_wind)}</span>
         <span>
-          <div className="round-name">{seatName(view.prevailing_wind)} round</div>
+          <div className="round-name">
+            {view.session?.round_label ?? `${seatName(view.prevailing_wind)} round`}
+          </div>
           <div className="round-dealer">Dealer: {dealerName}</div>
         </span>
       </div>

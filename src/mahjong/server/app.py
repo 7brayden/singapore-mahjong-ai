@@ -114,6 +114,22 @@ async def submit_action(game_id: str, action: ActionRequest):
         return managed.view()
 
 
+@app.post("/games/{game_id}/next-hand")
+async def next_hand(game_id: str):
+    """Advance the session: apply the finished hand's payments to the
+    running scores, move the dealership per table rules (dealer repeats
+    on a win or draw), and deal the next wall — or mark the session
+    over after North 4."""
+    managed = _get_or_404(game_id)
+    async with managed.lock:
+        try:
+            managed.next_hand()
+        except RuntimeError as exc:
+            raise HTTPException(409, str(exc))
+        await managed.broadcast()
+        return managed.view()
+
+
 @app.get("/games/{game_id}/hint")
 async def hint(game_id: str):
     """What would the agent seated at the human's position do?"""

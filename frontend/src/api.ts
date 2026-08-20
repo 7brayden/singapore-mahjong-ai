@@ -44,6 +44,15 @@ export interface ResultView {
   };
 }
 
+export interface SessionView {
+  hand_number: number;
+  round_wind: number;
+  round_label: string;   // "East 2" = second dealership of the East round
+  dealer: number;
+  scores: number[];      // running totals over completed hands
+  session_over: boolean;
+}
+
 export interface GameView {
   seat: number;
   hand: number[];
@@ -56,6 +65,7 @@ export interface GameView {
   game_over: boolean;
   pending: PendingView | null;
   result: ResultView | null;
+  session: SessionView;
 }
 
 export interface DiscardAnalysis {
@@ -127,6 +137,9 @@ export function createGame(body: {
 }
 
 export const getView = (gameId: string) => request<GameView>("GET", `/games/${gameId}`);
+
+export const postNextHand = (gameId: string) =>
+  request<GameView>("POST", `/games/${gameId}/next-hand`);
 
 export const postAction = (gameId: string, answer: unknown) =>
   request<GameView>("POST", `/games/${gameId}/action`, { answer });

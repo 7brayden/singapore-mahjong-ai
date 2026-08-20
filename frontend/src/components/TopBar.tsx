@@ -2,6 +2,7 @@ import { seatChar, seatName } from "../tiles";
 
 interface TopBarProps {
   prevailingWind: number | null;
+  roundLabel: string | null;  // "East 2" — dealership within the round
   handNumber: number;
   seedText: string;
   analysisOn: boolean;
@@ -9,7 +10,7 @@ interface TopBarProps {
   inGame: boolean;
 }
 
-export function TopBar({ prevailingWind, handNumber, seedText,
+export function TopBar({ prevailingWind, roundLabel, handNumber, seedText,
                          analysisOn, onToggleAnalysis, inGame }: TopBarProps) {
   return (
     <header className="topbar">
@@ -21,7 +22,7 @@ export function TopBar({ prevailingWind, handNumber, seedText,
           {inGame && prevailingWind !== null ? (
             <>
               <span className="zh">{seatChar(prevailingWind)}</span>
-              <span>{seatName(prevailingWind)} round</span>
+              <span>{roundLabel ?? `${seatName(prevailingWind)} round`}</span>
               <span className="dot">·</span>
               <span>Hand {handNumber}</span>
               {seedText && (

@@ -1,4 +1,4 @@
-import type { GameView, ResultView } from "../api";
+import type { GameView, ResultView, SessionView } from "../api";
 import { tileFace } from "../tiles";
 import { TileView } from "./Tile";
 
@@ -13,20 +13,35 @@ interface GameEndProps {
   result: ResultView;
   displayNames: string[];
   handNumber: number;
+  session?: SessionView;
   onNextHand: () => void;
   onEndSession: () => void;
 }
 
-export function GameEnd({ view, result, displayNames, handNumber,
+export function GameEnd({ view, result, displayNames, handNumber, session,
                           onNextHand, onEndSession }: GameEndProps) {
   const humanWon = result.winner === view.seat;
   const isDraw = result.winner === null;
   const winnerName = result.winner !== null ? displayNames[result.winner] : "";
   const winTileFace = result.win_tile !== null ? tileFace(result.win_tile) : null;
 
+  const roundTag = session ? `${session.round_label} · ` : "";
   const eyebrow = isDraw
-    ? `Hand ${handNumber} · Nobody wins`
-    : `Hand ${handNumber} · Won by ${humanWon ? "you" : winnerName}`;
+    ? `${roundTag}Hand ${handNumber} · Nobody wins`
+    : `${roundTag}Hand ${handNumber} · Won by ${humanWon ? "you" : winnerName}`;
+
+  // Standings after this hand's payments land
+  const standings = session
+    ? [0, 1, 2, 3]
+        .map((seat) => ({
+          seat,
+          pts: session.scores[seat] + (result.payments[seat] ?? 0),
+        }))
+        .sort((a, b) => b.pts - a.pts)
+    : null;
+  // The dealership passes unless the dealer won or the hand drew
+  const dealerRepeats =
+    session && (isDraw || result.winner === session.dealer);
 
   const title = isDraw
     ? "Draw — wall exhausted"
@@ -122,12 +137,42 @@ export function GameEnd({ view, result, displayNames, handNumber,
             )}
           </div>
         </div>
+        {standings && (
+          <div className="end-standings">
+            <div className="section-label" style={{ marginBottom: 6 }}>
+              {session!.session_over ? "Final standings" : "Session standings"}
+            </div>
+            {standings.map(({ seat, pts }, i) => (
+              <div key={seat} className="standing-row">
+                <span className="standing-rank">{i + 1}</span>
+                <span className="standing-name">{displayNames[seat]}</span>
+                <span className="standing-pts">{pts >= 0 ? "+" : ""}{pts} pts</span>
+              </div>
+            ))}
+            {!session!.session_over && (
+              <div className="standing-note">
+                {dealerRepeats
+                  ? `${displayNames[session!.dealer]} ${
+                      session!.dealer === view.seat ? "keep" : "keeps"} the deal (连庄)`
+                  : "The deal passes on"}
+              </div>
+            )}
+          </div>
+        )}
         <div className="end-footer">
-          <button className="btn-accent" autoFocus onClick={onNextHand}>Next hand</button>
-          <button className="btn-ghost" disabled title="Coming soon">
-            Review game with coach
-          </button>
-          <button className="bare" onClick={onEndSession}>End session</button>
+          {session?.session_over ? (
+            <button className="btn-accent" autoFocus onClick={onEndSession}>
+              New session
+            </button>
+          ) : (
+            <>
+              <button className="btn-accent" autoFocus onClick={onNextHand}>Next hand</button>
+              <button className="btn-ghost" disabled title="Coming soon">
+                Review game with coach
+              </button>
+              <button className="bare" onClick={onEndSession}>End session</button>
+            </>
+          )}
         </div>
       </div>
     </div>

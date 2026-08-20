@@ -1,6 +1,14 @@
-"""In-memory game registry for the API server."""
+"""In-memory game registry for the API server.
+
+A "game" here is a full SESSION (雀局): four prevailing-wind rounds,
+East 1 → North 4, with the dealership rotating per table rules — the
+dealer repeats (连庄) on their own win or a draw, otherwise it passes.
+Each next-hand call builds a fresh GameState from the session RNG, so
+one session seed reproduces every wall of every hand.
+"""
 
 import asyncio
+import random
 import uuid
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
@@ -9,6 +17,7 @@ from fastapi import WebSocket
 
 from mahjong.interactive import InteractiveGame
 from mahjong.scoring import ScoreConfig
+from mahjong.tiles import WIND_START, WIND_NAMES
 from mahjong.agents import (
     RandomAgent, GreedyAgent, DefensiveAgent, HybridAgent, LearnedAgent,
 )
@@ -33,8 +42,72 @@ class ManagedGame:
     # re-bill the API. {"key": fingerprint, "payload": response}
     explain_cache: Dict = field(default_factory=dict)
 
+    # ── Session state (dealership + rounds) ──────────────────────────
+    rng: random.Random = field(default_factory=random.Random)
+    score_config: Optional[ScoreConfig] = None
+    dealer: int = 0
+    wind_idx: int = 0          # 0-3 → East, South, West, North round
+    dealer_passes: int = 0     # dealerships completed this round
+    hand_number: int = 1
+    scores: List[int] = field(default_factory=lambda: [0, 0, 0, 0])
+    session_over: bool = False
+
+    @property
+    def round_label(self) -> str:
+        """"East 2" = second dealership of the East round."""
+        return f"{WIND_NAMES[self.wind_idx]} {self.dealer_passes + 1}"
+
+    def session_view(self) -> Dict:
+        return {
+            "hand_number": self.hand_number,
+            "round_wind": WIND_START + self.wind_idx,
+            "round_label": self.round_label,
+            "dealer": self.dealer,
+            "scores": self.scores[:],
+            "session_over": self.session_over,
+        }
+
+    def next_hand(self) -> None:
+        """Advance the session after a finished hand and deal the next.
+
+        Raises RuntimeError if the current hand is still in progress or
+        the session has ended.
+        """
+        if self.interactive.result is None:
+            raise RuntimeError("Current hand is not finished")
+        if self.session_over:
+            raise RuntimeError("Session is over — North 4 has been played")
+
+        result = self.interactive.result
+        payments = result.payments or [0, 0, 0, 0]
+        for q in range(4):
+            self.scores[q] += payments[q]
+
+        # Dealer repeats (连庄) on their own win or a draw
+        if result.winner is not None and result.winner != self.dealer:
+            self.dealer = (self.dealer + 1) % 4
+            self.dealer_passes += 1
+            if self.dealer_passes == 4:
+                self.dealer_passes = 0
+                self.wind_idx += 1
+                if self.wind_idx == 4:
+                    self.session_over = True
+                    return
+
+        agents = self.interactive.game.agents
+        self.interactive = InteractiveGame(
+            agents, human_seats={self.human_seat},
+            seed=self.rng.getrandbits(32), dealer=self.dealer,
+            prevailing_wind=WIND_START + self.wind_idx,
+            score_config=self.score_config)
+        self.hand_number += 1
+        self.explain_cache.clear()
+        self.interactive.start()
+
     def view(self) -> Dict:
-        return self.interactive.view_for(self.human_seat)
+        view = self.interactive.view_for(self.human_seat)
+        view["session"] = self.session_view()
+        return view
 
     async def broadcast(self):
         """Push the current view to every connected websocket."""
@@ -79,10 +152,16 @@ class GameManager:
                 raise ValueError(str(exc))
 
         config = ScoreConfig(tai_cap=tai_cap, base_unit=base_unit)
+        # The session RNG derives every hand's wall, so one seed
+        # reproduces the whole session. Hand 1 keeps the historical
+        # behavior of using the seed directly.
+        rng = random.Random(seed)
         interactive = InteractiveGame(agents, human_seats={human_seat},
-                                      seed=seed, score_config=config)
+                                      seed=seed, dealer=0,
+                                      score_config=config)
         game_id = uuid.uuid4().hex[:12]
-        managed = ManagedGame(game_id, interactive, human_seat)
+        managed = ManagedGame(game_id, interactive, human_seat,
+                              rng=rng, score_config=config)
         self.games[game_id] = managed
         interactive.start()
         return managed

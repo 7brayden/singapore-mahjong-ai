@@ -58,7 +58,7 @@ Reply in at most 110 words of plain second-person prose. No headers, no lists. W
 
 # ── Situation building (engine numbers only) ─────────────────────────
 
-def _tai_context(hand, seat_index: int) -> List[str]:
+def _tai_context(hand, seat_index: int, prevailing_wind: int = None) -> List[str]:
     """Authoritative per-hand scoring facts, stated by the engine.
 
     Exists because of an observed coaching failure: with a flower in
@@ -94,6 +94,43 @@ def _tai_context(hand, seat_index: int) -> List[str]:
         notes.append(
             "Fully concealed: winning by SELF-DRAW adds 门清 (+1 tai). "
             "Claiming any pong or chow forfeits it.")
+
+    # Honor tracks the hand is already holding: pairs and triplets of
+    # value winds/dragons are TAI IN HAND — the coach must never treat
+    # them as spare tiles. Added after an observed failure: the bot
+    # discarded from a seat-wind pair that was ALSO the prevailing
+    # wind (a 2-tai pong track and the whole minimum-tai gate) and the
+    # coach cheerfully narrated it.
+    from mahjong.tiles import WIND_START, DRAGON_START, tile_name
+    seat_wind = WIND_START + seat_index
+    for t in range(DRAGON_START, DRAGON_START + 3):
+        n = hand.counts[t]
+        if n >= 2:
+            notes.append(
+                f"You hold {'a pair' if n == 2 else 'a triplet'} of "
+                f"{tile_name(t)} — a dragon triplet is 1 tai and meets "
+                "the minimum on its own. Do not break it for tempo.")
+    wind_notes = []
+    for t in range(WIND_START, WIND_START + 4):
+        n = hand.counts[t]
+        if n < 2:
+            continue
+        is_seat = t == seat_wind
+        is_prev = prevailing_wind is not None and t == prevailing_wind
+        if is_seat and is_prev:
+            wind_notes.append(
+                f"Your {tile_name(t)} {'pair' if n == 2 else 'triplet'} is "
+                "your seat wind AND the prevailing wind — a pong is worth "
+                "2 tai. Breaking this pair throws away your strongest tai "
+                "track; treat those tiles as untouchable unless the hand "
+                "is folding.")
+        elif is_seat or is_prev:
+            which = "seat wind" if is_seat else "prevailing wind"
+            wind_notes.append(
+                f"Your {tile_name(t)} {'pair' if n == 2 else 'triplet'} is "
+                f"your {which} — a pong is 1 tai and meets the minimum. "
+                "Keep the pair intact while the hand is still fighting.")
+    notes.extend(wind_notes)
     return notes
 
 
@@ -146,7 +183,8 @@ def build_situation(game, seat: int, pending: Optional[Dict],
         "turn": game.turn,
         "tiles_remaining": game.tiles_remaining,
         # derived flags (retrieval + prompt context)
-        "tai_context": _tai_context(hand, game.seat_index(seat)),
+        "tai_context": _tai_context(hand, game.seat_index(seat),
+                                    game.prevailing_wind),
         "is_concealed": hand.num_exposed_melds == 0,
         "has_bonus_tiles": bool(hand.flowers),
         "flush_track": total > 0 and (biggest + honors) / total >= 0.7,

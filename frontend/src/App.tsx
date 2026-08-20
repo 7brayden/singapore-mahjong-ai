@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Analysis, Explanation, GameView, createGame, getAnalysis, getHint,
-  openGameSocket, postAction, postExplain,
+  openGameSocket, postAction, postExplain, postNextHand,
 } from "./api";
 import { tileFace } from "./tiles";
 import { TopBar } from "./components/TopBar";
@@ -32,7 +32,6 @@ export default function App() {
   const [gameId, setGameId] = useState<string | null>(null);
   const [view, setView] = useState<GameView | null>(null);
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
-  const [ledger, setLedger] = useState<number[]>([0, 0, 0, 0]);
   const [handNumber, setHandNumber] = useState(1);
   const [coachVisible, setCoachVisible] = useState(true);
   const [botBeat, setBotBeat] = useState(false);
@@ -60,7 +59,6 @@ export default function App() {
   }, []);
 
   const socketRef = useRef<WebSocket | null>(null);
-  const ledgerAppliedFor = useRef<string | null>(null);
   const beatTimer = useRef<number | null>(null);
 
   const displayNames = (() => {
@@ -101,7 +99,6 @@ export default function App() {
       });
       if (socketRef.current) socketRef.current.onclose = null;
       socketRef.current?.close();
-      ledgerAppliedFor.current = null;
       setGameId(created.game_id);
       setView(created.view);
       setAnalysis(null);
@@ -125,15 +122,24 @@ export default function App() {
   const onDeal = (cfg: SetupConfig) => {
     setConfig(cfg);
     setCoachVisible(cfg.coachOn);
-    setLedger([0, 0, 0, 0]);
     setHandNumber(1);
     startHand(cfg, 1);
   };
 
-  const onNextHand = () => {
-    const next = handNumber + 1;
-    setHandNumber(next);
-    startHand(config, next);
+  const onNextHand = async () => {
+    if (!gameId) return;
+    try {
+      const next = await postNextHand(gameId);
+      setView(next);
+      setAnalysis(null);
+      explainSeq.current += 1;
+      setClaimCoachLine(null);
+      setExplanation(null);
+      setExplainLoading(false);
+      setCoachInterim(null);
+    } catch (err) {
+      showError(err instanceof Error ? err.message : "Could not deal the next hand");
+    }
   };
 
   const onEndSession = () => {
@@ -278,7 +284,7 @@ export default function App() {
   if (phase === "setup" || !view) {
     return (
       <div className="app">
-        <TopBar prevailingWind={null} handNumber={handNumber} seedText={config.seedText}
+        <TopBar prevailingWind={null} roundLabel={null} handNumber={handNumber} seedText={config.seedText}
                 analysisOn={coachVisible} onToggleAnalysis={() => setCoachVisible(!coachVisible)}
                 inGame={false} />
         <Setup initial={config} error={setupError} busy={busy} onDeal={onDeal} />
@@ -317,19 +323,12 @@ export default function App() {
     return "An opponent";
   })();
 
-  // Engine payments are in points (base unit 1)
-  const chipsFor = (seat: number) => ledger[seat] + (view.players[seat].chips ?? 0);
-
-  const ledgerAfter = view.result
-    ? ledger.map((chips, seat) => chips + (view.result!.payments[seat] ?? 0))
-    : ledger;
-
-  const applyLedgerAndAdvance = () => {
-    if (gameId && ledgerAppliedFor.current !== gameId) {
-      ledgerAppliedFor.current = gameId;
-      setLedger(ledgerAfter);
-    }
-  };
+  // Running session scores live on the server; during a finished hand
+  // the result's payments are shown on top so the end screen already
+  // reflects what the next hand will bank.
+  const chipsFor = (seat: number) =>
+    (view.session?.scores[seat] ?? 0) +
+    (view.result ? view.result.payments[seat] ?? 0 : 0);
 
   const tells: (string | null)[] = [null, null, null, null];
 
@@ -351,7 +350,9 @@ export default function App() {
 
   return (
     <div className="app">
-      <TopBar prevailingWind={view.prevailing_wind} handNumber={handNumber}
+      <TopBar prevailingWind={view.prevailing_wind}
+              roundLabel={view.session?.round_label ?? null}
+              handNumber={view.session?.hand_number ?? handNumber}
               seedText={config.seedText}
               analysisOn={coachVisible} onToggleAnalysis={() => setCoachVisible(!coachVisible)}
               inGame />
@@ -398,9 +399,10 @@ export default function App() {
           view={view}
           result={view.result}
           displayNames={displayNames}
-          handNumber={handNumber}
-          onNextHand={() => { applyLedgerAndAdvance(); onNextHand(); }}
-          onEndSession={() => { applyLedgerAndAdvance(); onEndSession(); }}
+          handNumber={view.session?.hand_number ?? handNumber}
+          session={view.session}
+          onNextHand={onNextHand}
+          onEndSession={onEndSession}
         />
       )}
       {errorToast && (

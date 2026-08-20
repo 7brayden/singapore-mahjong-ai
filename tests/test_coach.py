@@ -258,3 +258,23 @@ def test_situation_and_fallback_carry_the_tai_context():
     assert any("chou ping hu" in n for n in situation["tai_context"])
     text = fallback_text(situation, retrieve(situation))
     assert "chou ping hu" in text
+
+
+def test_tai_context_flags_double_wind_pair():
+    """Regression: the dealer's East pair in the East round is a 2-tai
+    pong track — the coach must state it, not treat East as a spare."""
+    from mahjong.coach.explain import _tai_context
+    from mahjong.hand import Hand
+    from mahjong.tiles import WIND_START
+
+    hand = Hand()
+    for t in [0, 0, 0, 10, 12, 12, 15, 15, 19, 20, 21, 27, 27]:
+        hand.add_tile(t)
+    notes = " ".join(_tai_context(hand, 0, WIND_START))
+    assert "seat wind AND the prevailing wind" in notes
+    assert "2 tai" in notes
+
+    # South's East pair in the East round: prevailing only, 1 tai
+    notes = " ".join(_tai_context(hand, 1, WIND_START))
+    assert "prevailing wind" in notes
+    assert "AND" not in notes.split("prevailing wind")[0].split(".")[-1]
