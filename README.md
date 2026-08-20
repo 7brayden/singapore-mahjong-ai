@@ -405,6 +405,26 @@ rate itself significant for the first time. A fresh-seed 1,000-game run
 agrees (+3.232 [+1.229, +5.235]). The claim decisions inherited the better V
 for free — Phase B's branch comparison never had its own model to retrain.
 
+### The tai-track gate: engine as rulebook (current scoreboard)
+
+A play session surfaced the last fallacy class: the claim advisor could
+recommend ponging the pair out of a live ping hu — trading a 4-tai track
+for a hand that cannot legally win (minimum 1 tai). A 16-agent audit found
+the value model underprices that forfeit 2-5x and nothing anywhere priced
+the legality rule; the artifact avoiding the bug after each retrain was a
+coefficient accident. The fix is `mahjong/tai_track.py`: one engine-truth
+module (structural tai ceiling, tenpai legality) backing a claim gate that
+vetoes live→dead claims in BOTH agents, a zero-and-cap clamp on every
+valuation, and claim advice that states the engine-computed consequence —
+with adversarial-model tests proving the gate holds under any artifact a
+retrain can produce.
+
+Post-gate scoreboard, same 6,000 games: the gate helped the HYBRID more
+(its tai-blind claim rule was ruining its own ping hus constantly), so the
+head-to-head is now a near-dead heat — learned +0.989/seed, 95% CI
+[−0.027, +2.004], not significant; deal-in still clearly better (1.22% vs
+1.57%, p<0.0001). Two honest agents, one law.
+
 ## Scoring (tai)
 
 Every win is scored as a list of named tai items (`scoring.py`), so the UI can show players exactly why a hand is worth what it is. Point value doubles per tai (`2^(tai−1)`), capped at the tai limit — set per game in the setup screen (5-10, default 6).
