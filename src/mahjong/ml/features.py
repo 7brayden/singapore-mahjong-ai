@@ -161,6 +161,16 @@ OUTCOME_FEATURES = [
                             # counts honors as flush-compatible
     "shanten_x_turn",       # far hand late in the game ≈ worthless
     "accept_x_wall",        # improving tiles only pay while draws remain
+    # ── Phase C2: the law as features ────────────────────────────────
+    # A 16-agent audit showed the model priced the ping hu forfeit
+    # 2-5x too low and had NO axis for "a 0-tai hand cannot legally
+    # win". These come from tai_track — the same engine-truth module
+    # the claim gate reads — so training and decisions share one
+    # arithmetic and the model can learn to price the law itself.
+    "tai_ceiling",          # structural_tai_ceiling / 8 — best achievable
+    "dead_hand",            # ceiling < min tai → cannot legally win as-is
+    "tenpai_legal",         # at tenpai: does ANY wait complete legally?
+                            # (1.0 off-tenpai — no obstruction yet)
 ]
 
 # Progress of one tile type toward a scoring triplet: a pair is worth
@@ -255,7 +265,10 @@ def outcome_features(player_idx: int, game, counts_after: List[int],
 
     # Phase C features
     bonus_tai = _bonus_tai(flowers, seat_index)
-    pinghu_live = 1.0 if (not flowers and exposed_pongs == 0) else 0.0
+    # Drift fix: a hand with all four melds claimed can never score
+    # ping hu (bare-pair wait rule) — the old definition missed it.
+    pinghu_live = 1.0 if (not flowers and exposed_pongs == 0
+                          and num_melds < 4) else 0.0
     tenpai = 1.0 if shanten <= 0 else 0.0
     locked = bonus_tai
     locked += sum(1 for d in range(DRAGON_START, DRAGON_START + 3)
@@ -266,6 +279,21 @@ def outcome_features(player_idx: int, game, counts_after: List[int],
         locked += 1
     turn_frac = min(1.0, game.turn / 60.0)
     wall_frac = min(1.0, game.tiles_remaining / 92.0)
+
+    # Legality features (engine truth via tai_track)
+    from mahjong.tai_track import structural_tai_ceiling, legal_win_exists
+    cfg = game.score_config
+    ceiling = structural_tai_ceiling(counts_after, exposed, flowers,
+                                     seat_index, game.prevailing_wind,
+                                     cfg, shanten=shanten)
+    dead_hand = 1.0 if (ceiling < cfg.min_tai
+                        and not cfg.allow_chicken_hand) else 0.0
+    if shanten == 0 and not dead_hand:
+        tenpai_legal = 1.0 if legal_win_exists(
+            counts_after, exposed, flowers, seat_index,
+            game.prevailing_wind, cfg) else 0.0
+    else:
+        tenpai_legal = 0.0 if dead_hand and shanten == 0 else 1.0
 
     return [
         shanten / 6.0,
@@ -290,4 +318,7 @@ def outcome_features(player_idx: int, game, counts_after: List[int],
         biggest_suit / total_tiles if total_tiles else 0.0,
         (shanten / 6.0) * turn_frac,
         min(1.0, acceptance / 30.0) * wall_frac,
+        min(1.0, ceiling / 8.0),
+        dead_hand,
+        tenpai_legal,
     ]

@@ -26,17 +26,24 @@ class LinearModel:
 
     link="logistic" (default) squashes the linear score through a
     sigmoid — probabilities. link="identity" returns the raw score —
-    regression, used by the hand-value model, whose output is POINTS.
+    regression in POINTS. link="exp2" returns 2**score, capped at
+    output_cap — used by the payout-size heads, because this table's
+    payouts are literally base·2^(tai−1): a linear model in log2 space
+    prices each extra tai as a DOUBLING, which a points-space ridge
+    structurally cannot (it can only subtract constants — the exact
+    failure that underpriced the ping hu forfeit 2-5x).
     """
 
     def __init__(self, features: List[str], mean: List[float],
                  scale: List[float], coef: List[float], intercept: float,
-                 metadata: Optional[Dict] = None, link: str = "logistic"):
+                 metadata: Optional[Dict] = None, link: str = "logistic",
+                 output_cap: Optional[float] = None):
         n = len(features)
         if not (len(mean) == len(scale) == len(coef) == n):
             raise ValueError("model arrays disagree on feature count")
-        if link not in ("logistic", "identity"):
+        if link not in ("logistic", "identity", "exp2"):
             raise ValueError(f"unknown link {link!r}")
+        self.output_cap = output_cap
         self.features = features
         self.mean = mean
         self.scale = scale
@@ -51,7 +58,7 @@ class LinearModel:
             data = json.load(f)
         return cls(data["features"], data["mean"], data["scale"],
                    data["coef"], data["intercept"], data.get("metadata"),
-                   data.get("link", "logistic"))
+                   data.get("link", "logistic"), data.get("output_cap"))
 
     def save(self, path: str) -> None:
         with open(path, "w") as f:
@@ -63,6 +70,7 @@ class LinearModel:
                 "intercept": self.intercept,
                 "metadata": self.metadata,
                 "link": self.link,
+                "output_cap": self.output_cap,
             }, f, indent=2)
             f.write("\n")
 
@@ -75,6 +83,9 @@ class LinearModel:
             z += self.coef[i] * (x[i] - self.mean[i]) / self.scale[i]
         if self.link == "identity":
             return z
+        if self.link == "exp2":
+            cap = self.output_cap if self.output_cap is not None else 192.0
+            return min(2.0 ** min(z, 16.0), cap)
         # Numerically safe sigmoid
         if z >= 0:
             return 1.0 / (1.0 + math.exp(-z))
@@ -134,7 +145,8 @@ class CompositeValueModel:
             data = json.load(f)
         parts = {name: LinearModel(c["features"], c["mean"], c["scale"],
                                    c["coef"], c["intercept"], c.get("metadata"),
-                                   c.get("link", "logistic"))
+                                   c.get("link", "logistic"),
+                                   c.get("output_cap"))
                  for name, c in data["components"].items()}
         return cls(parts["win"], parts["win_size"], parts["pay"],
                    parts["pay_size"], data.get("metadata"))
@@ -143,7 +155,8 @@ class CompositeValueModel:
         def _dump(m: LinearModel) -> Dict:
             return {"features": m.features, "mean": m.mean, "scale": m.scale,
                     "coef": m.coef, "intercept": m.intercept,
-                    "metadata": m.metadata, "link": m.link}
+                    "metadata": m.metadata, "link": m.link,
+                    "output_cap": m.output_cap}
         with open(path, "w") as f:
             json.dump({
                 "kind": "composite_value",

@@ -35,6 +35,53 @@ from mahjong.hand import evaluate_discards, get_winning_tiles
 from mahjong.scoring import score_win, is_legal_win
 from mahjong.opponent_model import estimate_opponent_threats
 from mahjong.agents import GreedyAgent, HybridAgent, DefensiveAgent, RandomAgent
+
+
+class EpsilonClaimAgent(HybridAgent):
+    """Hybrid play with ε-random CLAIM decisions — exploration data.
+
+    The claim confound ("claiming means you were already close") exists
+    because policy agents only claim when their rule says so; observed
+    claim outcomes carry no counterfactual contrast, and with the
+    legality gate in every agent, structurally dead post-claim states
+    would vanish from the data entirely — leaving the dead_hand feature
+    nothing to learn from. This agent flips a claim coin with
+    probability ε, DELIBERATELY bypassing both the shanten rule and the
+    tai-track gate: exploration must visit the states the policy
+    refuses, or the model can never learn WHY they are refused.
+
+    Quarantined to dedicated lineups (ablatable via the lineup column);
+    seeded per game for determinism.
+    """
+
+    EPSILON = 0.08
+
+    def __init__(self, name: str = "EpsHybrid"):
+        super().__init__(name)
+        self._rng = None  # seeded by datagen per game
+
+    def set_seed(self, seed: int):
+        import random as _random
+        self._rng = _random.Random(seed)
+
+    def _explore(self) -> bool:
+        return self._rng is not None and self._rng.random() < self.EPSILON
+
+    def should_claim(self, player_idx, tile_id, claim_type, game_state):
+        if self._explore():
+            hand = game_state.hands[player_idx]
+            needed = 2 if claim_type == "pong" else 3
+            if hand.counts[tile_id] >= needed:
+                return self._rng.random() < 0.5
+        return super().should_claim(player_idx, tile_id, claim_type,
+                                    game_state)
+
+    def choose_chow(self, player_idx, tile_id, options, game_state):
+        if self._explore() and options:
+            if self._rng.random() < 0.5:
+                return list(self._rng.choice(options))
+            return None
+        return super().choose_chow(player_idx, tile_id, options, game_state)
 from mahjong.ml.features import (
     DANGER_FEATURES, OUTCOME_FEATURES, danger_features, outcome_features,
 )
@@ -50,6 +97,12 @@ LINEUPS = [
              DefensiveAgent("D"), RandomAgent("R")],
     lambda: [HybridAgent("H0"), DefensiveAgent("D"),
              HybridAgent("H1"), GreedyAgent("G")],
+    # ε-exploration lineups (Phase C2): random claim flips generate the
+    # counterfactual claim outcomes — including into structurally dead
+    # hands — that policy play can no longer produce.
+    lambda: [EpsilonClaimAgent(f"E{i}") for i in range(4)],
+    lambda: [EpsilonClaimAgent("E0"), HybridAgent("H1"),
+             EpsilonClaimAgent("E2"), HybridAgent("H3")],
 ]
 
 # decision_id is a per-game counter shared by every row of one decision,
@@ -111,7 +164,11 @@ def generate_game(game_id: int, seed: int, lineup_fn,
     information wait sets, no per-candidate ron-legality probes — for
     cheap outcome-only regeneration when only OUTCOME_FEATURES changed.
     """
-    game = GameState(lineup_fn(), seed=seed)
+    agents = lineup_fn()
+    for i, a in enumerate(agents):
+        if hasattr(a, "set_seed"):
+            a.set_seed(seed * 4 + i)
+    game = GameState(agents, seed=seed)
     gen = game.step_game()
     wait_cache: dict = {}
     outcome_start = len(outcome_rows)

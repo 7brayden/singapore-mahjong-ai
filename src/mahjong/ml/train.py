@@ -298,21 +298,32 @@ def train_value(data_dir: str):
     report("    logistic", test_paid, clf_p.predict_proba(
         sc_p.transform(test_x))[:, 1])
 
+    # Size heads fit LOG2 of the payout: this table's payments are
+    # literally base·2^(tai−1), so log2-space is where they are linear.
+    # A points-space ridge can only subtract constants for a lost tai
+    # track — which is exactly how the ping hu forfeit got underpriced
+    # 2-5x. ENGINE_CAP = the largest payout the rules can produce
+    # (thirteen wonders: everyone pays double the limit → 2·3·2^5).
+    ENGINE_CAP = 192.0
     win_rows = train_y > 0
     pay_rows = train_y < 0
     sc_ws = StandardScaler().fit(train_x[win_rows])
     reg_ws = Ridge(alpha=1.0).fit(sc_ws.transform(train_x[win_rows]),
-                                  train_y[win_rows])
+                                  np.log2(train_y[win_rows]))
     sc_ps = StandardScaler().fit(train_x[pay_rows])
     reg_ps = Ridge(alpha=1.0).fit(sc_ps.transform(train_x[pay_rows]),
-                                  -train_y[pay_rows])
+                                  np.log2(-train_y[pay_rows]))
+
+    def _exp2(reg, sc, X):
+        return np.minimum(2.0 ** np.minimum(
+            reg.predict(sc.transform(X)), 16.0), ENGINE_CAP)
     t_win, t_pay = test_y > 0, test_y < 0
     print(f"  E[pts|win]  on {win_rows.sum():,} winner rows: "
-          f"test MAE {mean_absolute_error(test_y[t_win], reg_ws.predict(sc_ws.transform(test_x[t_win]))):.3f}  "
-          f"R² {r2_score(test_y[t_win], reg_ws.predict(sc_ws.transform(test_x[t_win]))):.4f}")
+          f"test MAE {mean_absolute_error(test_y[t_win], _exp2(reg_ws, sc_ws, test_x[t_win])):.3f}  "
+          f"R² {r2_score(test_y[t_win], _exp2(reg_ws, sc_ws, test_x[t_win])):.4f}   (exp2 link)")
     print(f"  E[pts|pay]  on {pay_rows.sum():,} payer rows:  "
-          f"test MAE {mean_absolute_error(-test_y[t_pay], reg_ps.predict(sc_ps.transform(test_x[t_pay]))):.3f}  "
-          f"R² {r2_score(-test_y[t_pay], reg_ps.predict(sc_ps.transform(test_x[t_pay]))):.4f}\n")
+          f"test MAE {mean_absolute_error(-test_y[t_pay], _exp2(reg_ps, sc_ps, test_x[t_pay])):.3f}  "
+          f"R² {r2_score(-test_y[t_pay], _exp2(reg_ps, sc_ps, test_x[t_pay])):.4f}   (exp2 link)\n")
 
     # ── Recomposed V on the held-out set ─────────────────────────────
     def _lin(scaler, est, link):
@@ -326,14 +337,16 @@ def train_value(data_dir: str):
 
     composite = CompositeValueModel(
         win=_lin(sc_w, clf_w, "logistic"),
-        win_size=_lin(sc_ws, reg_ws, "identity"),
+        win_size=_lin(sc_ws, reg_ws, "exp2"),
         pay=_lin(sc_p, clf_p, "logistic"),
-        pay_size=_lin(sc_ps, reg_ps, "identity"))
+        pay_size=_lin(sc_ps, reg_ps, "exp2"))
+    for part in (composite.win_size, composite.pay_size):
+        part.output_cap = ENGINE_CAP
 
     p_w = clf_w.predict_proba(sc_w.transform(test_x))[:, 1]
     p_p = clf_p.predict_proba(sc_p.transform(test_x))[:, 1]
-    e_w = np.maximum(0.0, reg_ws.predict(sc_ws.transform(test_x)))
-    e_p = np.maximum(0.0, reg_ps.predict(sc_ps.transform(test_x)))
+    e_w = _exp2(reg_ws, sc_ws, test_x)
+    e_p = _exp2(reg_ps, sc_ps, test_x)
     pred = p_w * e_w - p_p * e_p
 
     def value_report(name, p):
@@ -361,6 +374,28 @@ def train_value(data_dir: str):
     print("    " + "  ".join(f"{a:+.2f}" for a in actual))
     print(f"    monotone steps: {monotone}/9, "
           f"D10−D1 spread {actual[-1] - actual[0]:+.2f} pts")
+
+    # ── Export gate (Phase C2): a retrain must never ship an artifact
+    # that believes structurally dead hands win. This is how the pinghu
+    # bug got back into production once — silently, via new weights.
+    if "dead_hand" in col:
+        dead = test[:, col["dead_hand"]] == 1.0
+        n_dead = int(dead.sum())
+        if n_dead >= 50:
+            pred_dead = p_w[dead].mean()
+            real_dead = float((test_y[dead] > 0).mean())
+            limit = max(0.05, 2.0 * real_dead)
+            print(f"\n  Export gate — dead-hand slice ({n_dead:,} rows): "
+                  f"predicted P(win) {pred_dead:.4f}, realized {real_dead:.4f}, "
+                  f"limit {limit:.4f}")
+            if pred_dead > limit:
+                raise RuntimeError(
+                    f"EXPORT REFUSED: model predicts dead hands win "
+                    f"{pred_dead:.1%} (realized {real_dead:.1%}, limit "
+                    f"{limit:.1%}). Fix the features/data before shipping.")
+        else:
+            print(f"\n  Export gate — dead-hand slice too small "
+                  f"({n_dead} rows); gate not evaluated.")
 
     composite.metadata = {
         "label": "net_points (decomposed)", "games": int(n_games),

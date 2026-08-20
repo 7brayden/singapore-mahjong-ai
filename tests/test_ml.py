@@ -362,3 +362,69 @@ def test_claim_decisions_are_deterministic():
         return (result.winner, result.win_type, result.turns, melds)
 
     assert play(21) == play(21)
+
+
+# ── Phase C2: legality features + exp2 link ──────────────────────────
+
+def test_legality_features_match_engine():
+    """tenpai_legal / dead_hand must agree with the scoring engine —
+    the drift between pinghu_live and the wait rules must never recur."""
+    from mahjong.tai_track import structural_tai_ceiling, legal_win_exists
+    from mahjong.game import GameState
+
+    game = GameState([HybridAgent(f"H{i}") for i in range(4)], seed=11)
+    gen = game.step_game()
+    next(gen)
+    threat = estimate_opponent_threats(0, game)
+    idx = {n: i for i, n in enumerate(OUTCOME_FEATURES)}
+    hand = game.hands[0]
+    counts = hand.copy_counts()
+    for t in range(len(counts)):
+        if counts[t]:
+            counts[t] -= 1
+            break
+    from mahjong.hand import calculate_shanten
+    sh = calculate_shanten(counts, hand.num_exposed_melds)
+    x = outcome_features(0, game, counts, sh, 10, threat)
+    ceiling = structural_tai_ceiling(counts, hand.exposed, hand.flowers,
+                                     0, game.prevailing_wind,
+                                     game.score_config, shanten=sh)
+    assert x[idx["tai_ceiling"]] == pytest.approx(min(1.0, ceiling / 8.0))
+    assert x[idx["dead_hand"]] == (1.0 if ceiling < 1 else 0.0)
+    if sh == 0 and ceiling >= 1:
+        legal = legal_win_exists(counts, hand.exposed, hand.flowers,
+                                 0, game.prevailing_wind, game.score_config)
+        assert x[idx["tenpai_legal"]] == (1.0 if legal else 0.0)
+
+
+def test_exp2_link_prices_doublings():
+    from mahjong.ml.model import LinearModel
+    n = len(OUTCOME_FEATURES)
+    coef = [0.0] * n
+    coef[0] = 1.0  # one standardized unit of the first feature = one tai
+    m = LinearModel(features=list(OUTCOME_FEATURES), mean=[0.0] * n,
+                    scale=[1.0] * n, coef=coef, intercept=2.0,
+                    link="exp2", output_cap=192.0)
+    x0 = [0.0] * n
+    x1 = [1.0] + [0.0] * (n - 1)
+    assert m.predict(x0) == pytest.approx(4.0)   # 2^2
+    assert m.predict(x1) == pytest.approx(8.0)   # one more tai = double
+    x_big = [40.0] + [0.0] * (n - 1)
+    assert m.predict(x_big) == 192.0             # engine cap binds
+
+
+def test_exp2_roundtrip():
+    from mahjong.ml.model import LinearModel
+    import json
+    n = len(OUTCOME_FEATURES)
+    m = LinearModel(features=list(OUTCOME_FEATURES), mean=[0.0] * n,
+                    scale=[1.0] * n, coef=[0.0] * n, intercept=3.0,
+                    link="exp2", output_cap=192.0)
+    import tempfile, os
+    with tempfile.TemporaryDirectory() as d:
+        path = os.path.join(d, "m.json")
+        m.save(path)
+        loaded = LinearModel.load(path)
+        assert loaded.link == "exp2"
+        assert loaded.output_cap == 192.0
+        assert loaded.predict([0.0] * n) == pytest.approx(8.0)
