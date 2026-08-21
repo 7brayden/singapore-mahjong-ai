@@ -14,7 +14,6 @@ import {
 } from "./components/Setup";
 
 // Balances start at zero and track net win/loss in cents.
-const BOT_BEAT_MS = 750;
 
 function parseSeed(text: string): number | null {
   if (!text) return null;
@@ -34,7 +33,16 @@ export default function App() {
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [handNumber, setHandNumber] = useState(1);
   const [coachVisible, setCoachVisible] = useState(true);
-  const [botBeat, setBotBeat] = useState(false);
+  // Bot-turn replay: the server resolves every bot turn between your
+  // decisions and sends ONE view, so up to three discards would snap
+  // into the rivers at once. The sequencer replays them as beats —
+  // acting seat pulses, tile lands, next seat — so the table reads
+  // like a table instead of a teleport.
+  const [actingSeat, setActingSeat] = useState<number | null>(null);
+  const [latestDiscard, setLatestDiscard] =
+    useState<{ seat: number; index: number } | null>(null);
+  const seqTimer = useRef<number | null>(null);
+  const targetView = useRef<GameView | null>(null);
   const [claimCoachLine, setClaimCoachLine] = useState<string | null>(null);
   // Engine-computed tai consequence of the pending claim — rendered on
   // the claim card verdict-INDEPENDENTLY (the rulebook speaks even
@@ -63,7 +71,6 @@ export default function App() {
   }, []);
 
   const socketRef = useRef<WebSocket | null>(null);
-  const beatTimer = useRef<number | null>(null);
 
   const displayNames = (() => {
     const names = ["", "", "", ""];
@@ -85,6 +92,66 @@ export default function App() {
 
   // ── Game lifecycle ───────────────────────────────────────────────
 
+  const ingestView = useCallback((next: GameView) => {
+    const prev = targetView.current;
+    targetView.current = next;
+    if (seqTimer.current) {
+      window.clearTimeout(seqTimer.current);
+      seqTimer.current = null;
+    }
+    // Fresh hand / first view / anything that rewinds a river: no replay
+    const reset = !prev || next.players.some(
+      (pl, seatIdx) => pl.discards.length < prev.players[seatIdx].discards.length);
+    if (reset) {
+      setView(next);
+      setActingSeat(null);
+      setLatestDiscard(null);
+      return;
+    }
+    // New bot discards since the last displayed view, in turn order
+    // from whoever acted last (approximate across claims, exact within
+    // each river — legibility, not forensics).
+    const steps: Array<{ seat: number; index: number }> = [];
+    for (let off = 0; off < 4; off++) {
+      const seatIdx = (prev.active_player + off) % 4;
+      if (seatIdx === next.seat) continue;
+      for (let i = prev.players[seatIdx].discards.length;
+           i < next.players[seatIdx].discards.length; i++) {
+        steps.push({ seat: seatIdx, index: i });
+      }
+    }
+    if (steps.length === 0) {
+      setView(next);
+      return;
+    }
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const stepMs = reduce ? 40 : steps.length > 5 ? 260 : 430;
+    const run = (k: number) => {
+      if (targetView.current !== next) return; // superseded by a newer view
+      if (k >= steps.length) {
+        setActingSeat(null);
+        setView(next);
+        return;
+      }
+      const upto = steps.slice(0, k + 1);
+      setActingSeat(steps[k].seat);
+      setLatestDiscard(steps[k]);
+      setView({
+        ...next,
+        pending: null,  // your prompt waits until the table catches up
+        players: next.players.map((pl, seatIdx) => {
+          if (seatIdx === next.seat) return pl;
+          const shown = prev.players[seatIdx].discards.length
+            + upto.filter((st) => st.seat === seatIdx).length;
+          return { ...pl, discards: pl.discards.slice(0, shown) };
+        }),
+      });
+      seqTimer.current = window.setTimeout(() => run(k + 1), stepMs);
+    };
+    run(0);
+  }, []);
+
+
   const startHand = useCallback(async (cfg: SetupConfig, hand: number) => {
     setBusy(true);
     setSetupError(null);
@@ -104,7 +171,8 @@ export default function App() {
       if (socketRef.current) socketRef.current.onclose = null;
       socketRef.current?.close();
       setGameId(created.game_id);
-      setView(created.view);
+      targetView.current = null;   // new session: nothing to replay
+      ingestView(created.view);
       setAnalysis(null);
       explainSeq.current += 1;
       setClaimCoachLine(null);
@@ -112,9 +180,8 @@ export default function App() {
       setExplanation(null);
       setExplainLoading(false);
       setCoachInterim(null);
-      setBotBeat(false);
       setPhase("playing");
-      socketRef.current = openGameSocket(created.game_id, setView, () =>
+      socketRef.current = openGameSocket(created.game_id, ingestView, () =>
         showError("Live connection dropped — if the table stops updating, refresh."));
     } catch (err) {
       setSetupError(err instanceof Error ? err.message : "Could not reach the game server");
@@ -135,7 +202,7 @@ export default function App() {
     if (!gameId) return;
     try {
       const next = await postNextHand(gameId);
-      setView(next);
+      ingestView(next);
       setAnalysis(null);
       explainSeq.current += 1;
       setClaimCoachLine(null);
@@ -151,9 +218,13 @@ export default function App() {
   const onEndSession = () => {
     if (socketRef.current) socketRef.current.onclose = null;
     socketRef.current?.close();
+    if (seqTimer.current) window.clearTimeout(seqTimer.current);
+    targetView.current = null;
     setPhase("setup");
     setGameId(null);
     setView(null);
+    setActingSeat(null);
+    setLatestDiscard(null);
   };
 
   // ── Actions ──────────────────────────────────────────────────────
@@ -169,12 +240,7 @@ export default function App() {
       setExplanation(null);
       setExplainLoading(false);
       setCoachInterim(null);
-      if (!next.game_over) {
-        setBotBeat(true);
-        if (beatTimer.current) window.clearTimeout(beatTimer.current);
-        beatTimer.current = window.setTimeout(() => setBotBeat(false), BOT_BEAT_MS);
-      }
-      setView(next);
+      ingestView(next);
     } catch (err) {
       showError(err instanceof Error ? err.message : "That move was rejected");
     } finally {
@@ -182,7 +248,7 @@ export default function App() {
     }
   }, [gameId, showError]);
 
-  const onDiscard = (tile: number) => act(tile);
+  const onDiscard = (tile: number) => { setLatestDiscard(null); act(tile); };
   const onClaim = (accept: boolean) => act(accept);
   const onChow = (option: [number, number] | null) => act(option);
   const onKong = (option: [string, number] | null) => act(option);
@@ -311,7 +377,7 @@ export default function App() {
     );
   }
 
-  const pending = botBeat ? null : view.pending;
+  const pending = view.pending;
   const yourDiscardTurn = pending?.type === "discard";
   const drawnTile = yourDiscardTurn ? pending?.drawn ?? null : null;
   const claimTile =
@@ -394,6 +460,8 @@ export default function App() {
           heatVisible={coachVisible}
           statusText={yourDiscardTurn ? "Click a tile to discard" : "Bots are playing"}
           showExplain={coachVisible}
+          actingSeat={actingSeat}
+          latestDiscard={latestDiscard}
           onDiscard={onDiscard}
           onHint={requestExplanation}
           overlay={overlay}

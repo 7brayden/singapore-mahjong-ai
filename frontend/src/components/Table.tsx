@@ -22,9 +22,11 @@ interface SeatPanelProps {
   chips: number;
   tell: string | null;
   north?: boolean;
+  acting?: boolean;   // this seat is drawing/discarding right now
 }
 
-function SeatPanel({ player, displayName, persona, isDealer, chips, tell, north }: SeatPanelProps) {
+function SeatPanel({ player, displayName, persona, isDealer, chips, tell, north,
+                     acting }: SeatPanelProps) {
   const head = (
     <div className="seat-head">
       <span className="seat-char">{seatChar(player.seat_wind)}</span>
@@ -59,7 +61,7 @@ function SeatPanel({ player, displayName, persona, isDealer, chips, tell, north 
     </div>
   );
   return (
-    <div className={`seat-panel${isDealer ? " dealer" : ""}`}>
+    <div className={`seat-panel${isDealer ? " dealer" : ""}${acting ? " acting" : ""}`}>
       {head}
       {north ? (
         <div className="seat-body">
@@ -79,16 +81,18 @@ function SeatPanel({ player, displayName, persona, isDealer, chips, tell, north 
   );
 }
 
-function DiscardRiver({ player, position, claimTile }: {
+function DiscardRiver({ player, position, claimTile, freshIndex }: {
   player: PlayerView;
   position: "north" | "east" | "south" | "west";
   claimTile: number | null;
+  freshIndex: number | null;  // table-wide latest discard, kept lit
 }) {
   const last = player.discards.length - 1;
   return (
     <div className={`river ${position}`}>
       {player.discards.map((t, i) => {
         const isLast = i === last;
+        const isFresh = freshIndex !== null && i === freshIndex;
         const isClaimed = isLast && claimTile !== null && t === claimTile;
         return (
           <TileView
@@ -97,7 +101,8 @@ function DiscardRiver({ player, position, claimTile }: {
             size="river"
             riverFace
             entrance={isLast ? "land" : undefined}
-            ring={isClaimed ? "ring-glow" : isLast ? "ring-soft" : undefined}
+            ring={isClaimed || isFresh ? "ring-glow"
+                : isLast ? "ring-soft" : undefined}
           />
         );
       })}
@@ -267,6 +272,8 @@ export interface TableProps {
   heatVisible: boolean;
   statusText: string;
   showExplain: boolean;
+  actingSeat: number | null;
+  latestDiscard: { seat: number; index: number } | null;
   onDiscard: (tile: number) => void;
   onHint: () => void;
   overlay?: ReactNode;
@@ -283,9 +290,16 @@ export function Table(props: TableProps) {
     chips: props.chipsFor(seat),
     tell: props.tells[seat],
     north,
+    acting: props.actingSeat === seat,
   });
   const riverFor = (seat: number, position: "north" | "east" | "south" | "west") => (
-    <DiscardRiver player={view.players[seat]} position={position} claimTile={props.claimTile} />
+    <DiscardRiver
+      player={view.players[seat]}
+      position={position}
+      claimTile={props.claimTile}
+      freshIndex={props.latestDiscard?.seat === seat
+        ? props.latestDiscard.index : null}
+    />
   );
 
   return (
