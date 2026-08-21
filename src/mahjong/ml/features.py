@@ -171,6 +171,13 @@ OUTCOME_FEATURES = [
     "dead_hand",            # ceiling < min tai → cannot legally win as-is
     "tenpai_legal",         # at tenpai: does ANY wait complete legally?
                             # (1.0 off-tenpai — no obstruction yet)
+    "wait_copies",          # at tenpai: live copies of the wait / 8;
+                            # 0 off-tenpai. Exists because `acceptance`
+                            # means "improving tiles" at 1+ shanten but
+                            # "wait size" at tenpai — one coefficient
+                            # cannot serve both, which made the model
+                            # rate a wide 1-shanten hand ABOVE a ready
+                            # hand (the tenpai-blindness bug).
 ]
 
 # Progress of one tile type toward a scoring triplet: a pair is worth
@@ -321,4 +328,5 @@ def outcome_features(player_idx: int, game, counts_after: List[int],
         min(1.0, ceiling / 8.0),
         dead_hand,
         tenpai_legal,
+        min(1.0, acceptance / 8.0) if shanten == 0 else 0.0,
     ]

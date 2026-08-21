@@ -251,3 +251,41 @@ def test_consequence_neutral_wind_pong_headline():
     # a 1-tai claim, and the wind complaint must not appear.
     c = claim_consequence(h, 1, EAST, CFG, 28, "pong")
     assert c["headline"] is None or "neither your seat" not in c["headline"]
+
+
+# ── Tenpai hysteresis (the "advisor broke my ready hand" bug) ────────
+
+def _acceptance_model(points_per_acceptance):
+    """Monolithic identity model: V = k · acceptance feature. Lets a
+    test dial exactly how much the model prefers wide unready hands."""
+    n = len(OUTCOME_FEATURES)
+    coef = [0.0] * n
+    coef[OUTCOME_FEATURES.index("acceptance")] = points_per_acceptance
+    return LinearModel(features=list(OUTCOME_FEATURES), mean=[0.0] * n,
+                       scale=[1.0] * n, coef=coef, intercept=0.0,
+                       link="identity")
+
+
+# The screenshot hand: 1111w 23456w 77t 6s8s + drawn 9w. Discarding 9w
+# keeps a LEGAL ready hand (wait 7s, cat = 1 tai); discarding 8s goes
+# back to 1-shanten with far more acceptance.
+TENPAI_HAND = [0, 0, 0, 0, 1, 2, 3, 4, 5, 15, 15, 23, 25, 8]
+
+
+def test_agent_holds_legal_tenpai_inside_margin(quiet_danger):
+    # The model mildly prefers the wide 1-shanten branch (like the real
+    # artifact did, by 0.01 pts) — the hysteresis must hold the ready
+    # hand and discard the drawn 9w.
+    agent = LearnedAgent("L", model=quiet_danger,
+                         value_model=_acceptance_model(0.5))
+    game = game_with(hand_of(TENPAI_HAND, flowers=[39, 42]))
+    assert agent.choose_discard(0, game) == 8  # 9 Wan keeps the wait
+
+
+def test_agent_may_break_tenpai_past_margin(quiet_danger):
+    # When the alternative genuinely dominates (here: several points of
+    # EV), breaking the ready hand is allowed — hysteresis, not a ban.
+    agent = LearnedAgent("L", model=quiet_danger,
+                         value_model=_acceptance_model(8.0))
+    game = game_with(hand_of(TENPAI_HAND, flowers=[39, 42]))
+    assert agent.choose_discard(0, game) != 8

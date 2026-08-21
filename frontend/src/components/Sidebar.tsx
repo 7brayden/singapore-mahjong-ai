@@ -99,8 +99,12 @@ export function Sidebar({ view, analysis, displayNames, personas, paused,
   const best = candidates[0];
   const waits = analysis?.waiting_on ?? null;
 
+  const bestBreaksReady = tenpai && best != null && best.shanten_after > 0;
+
   const progressSub = (() => {
     if (shanten === null) return "Sizing up your hand…";
+    if (bestBreaksReady)
+      return "Careful — the starred pick gives up your ready hand. Check the wait before following it.";
     if (tenpai && waits) return "Hold steady — every discard should keep the wait alive.";
     if (best) {
       const face = tileFace(best.tile);
@@ -232,6 +236,9 @@ export function Sidebar({ view, analysis, displayNames, personas, paused,
                           <span className="best-chip">
                             {c.agent_pick ? "★ Coach's pick" : "★ Best"}
                           </span>
+                        )}
+                        {tenpai && c.shanten_after > 0 && (
+                          <span className="breaks-ready-chip">breaks ready</span>
                         )}
                         {i === 1 && candidates[0].agent_pick && (
                           <span className="fastest-chip">⚡ Fastest</span>

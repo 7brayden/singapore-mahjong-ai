@@ -84,7 +84,7 @@ Every discard and every claim is then just expected value: chance of winning tim
 
 The most useful lesson in the whole project came from a bug: the claim advisor once told me to pong my own pair out of a live ping hu — trading a 4-tai hand for one that couldn't legally win. The model had priced that mistake too cheap, and nothing in the code knew the legality rule at all. The fix wasn't a smarter model. It was admitting that "a 0-tai hand cannot win" is law, not statistics: the engine now computes what every hand can still score (`tai_track.py`), refuses claims that make a hand legally dead, and the UI tells you the cost of a claim no matter what the bot thinks. Then the models were retrained with the law as features, and training now refuses to export any model that believes dead hands win. Engine as rulebook, model as beliefs.
 
-How good is the learned bot? After both it and the strongest heuristic bot got the legality gate, they're in a statistical dead heat on points over 6,000 paired games — but the learned one deals in noticeably less (1.2% of discards vs 1.7%). It plays like a careful player who picks its fights.
+How good is the learned bot? Over 6,000 paired games against the strongest heuristic bot it wins more hands (25.4% vs 22.2%), deals in less (1.4% of discards vs 1.8%), and comes out about 3.6 points per seed ahead — all statistically solid. The last big jump came from teaching it not to break a ready hand for a marginal reshape, which is apparently a lesson for humans and machines alike.
 
 ## The coach
 

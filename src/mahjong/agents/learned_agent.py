@@ -82,6 +82,15 @@ class LearnedAgent(HybridAgent):
     # Legacy squash for danger_for (superseded; kept for comparisons).
     SQUASH_K = 0.02
 
+    # A LEGAL ready hand may only be abandoned when the alternative's
+    # EV wins by this many points. The value model's branch differences
+    # near tenpai sit inside its noise floor (an observed pick traded a
+    # live 4-tile legal wait for +0.01 EV), and its acceptance feature
+    # historically over-valued wide unready hands. Law-adjacent, like
+    # the claim gate: not "never break tenpai", but "breaking a ready
+    # hand must be a decision, not a rounding error".
+    TENPAI_HOLD_MARGIN = 1.0
+
     def __init__(self, name: str = "Learned",
                  model: Optional[LinearModel] = None,
                  value_model: Optional[LinearModel] = None, **kwargs):
@@ -278,6 +287,8 @@ class LearnedAgent(HybridAgent):
 
         best_tile = None
         best_ev = None
+        best_ready_tile = None
+        best_ready_ev = None
         # evals arrive sorted offense-best-first, so ties keep the
         # more efficient discard.
         for e in evals:
@@ -286,6 +297,12 @@ class LearnedAgent(HybridAgent):
             value = self.hand_value(player_idx, game_state, counts,
                                     e["shanten"], e["acceptance"],
                                     threat_data)
+            keeps_legal_ready = False
+            if e["shanten"] == 0:
+                keeps_legal_ready = legal_win_exists(
+                    counts, hand.exposed, hand.flowers,
+                    game_state.seat_index(player_idx),
+                    game_state.prevailing_wind, game_state.score_config)
             counts[tid] += 1
             p_di = self.deal_in_probability(tid, player_idx, game_state,
                                             threat_data, visible)
@@ -293,4 +310,13 @@ class LearnedAgent(HybridAgent):
             if best_ev is None or ev > best_ev:
                 best_tile = tid
                 best_ev = ev
+            if keeps_legal_ready and (best_ready_ev is None
+                                      or ev > best_ready_ev):
+                best_ready_tile = tid
+                best_ready_ev = ev
+        # Tenpai hysteresis: hold a legal ready hand unless the
+        # alternative clears a real margin.
+        if (best_ready_tile is not None and best_tile != best_ready_tile
+                and best_ev - best_ready_ev < self.TENPAI_HOLD_MARGIN):
+            return best_ready_tile
         return best_tile

@@ -638,6 +638,14 @@ button.hand-tile { cursor: default; }
   border-radius: 999px; padding: 2px 7px; font-weight: 700;
 }
 
+.breaks-ready-chip {
+  background: rgba(198, 86, 75, 0.16);
+  border: 1px solid rgba(198, 86, 75, 0.5);
+  color: var(--danger-text);
+  font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase;
+  border-radius: 999px; padding: 1px 7px; font-weight: 600;
+}
+
 .fastest-chip {
   background: transparent; color: var(--text-secondary);
   border: 1px solid rgba(255, 255, 255, 0.16);
