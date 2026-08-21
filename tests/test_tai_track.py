@@ -232,3 +232,22 @@ def test_hybrid_agent_shares_the_gate():
         game = game_with(hand_of(tiles))
         game.agents[0] = agent
         assert agent.should_claim(0, pair, "pong", game) is False
+
+
+def test_consequence_neutral_wind_pong_headline():
+    """Regression (screenshot bug): a neutral-wind pair pong on a
+    flower-holding hand got narrated with irrelevant ping-hu context.
+    The headline must state THIS decision's facts: 0-tai wind, chou
+    ping hu killed, concealment broken."""
+    h = hand_of([0, 2, 4, 4, 5, 6, 9, 10, 15, 16, 20, 28, 28],
+                flowers=[40, 45])  # Blue 3 + centipede; East seat
+    c = claim_consequence(h, 0, EAST, CFG, 28, "pong")
+    assert c["dead_after"] is False
+    assert "neither your seat nor the prevailing wind" in c["headline"]
+    assert "chou ping hu" in c["headline"]
+    assert "门清" in c["headline"]
+
+    # The same pong for the SOUTH-seat player is their seat wind —
+    # a 1-tai claim, and the wind complaint must not appear.
+    c = claim_consequence(h, 1, EAST, CFG, 28, "pong")
+    assert c["headline"] is None or "neither your seat" not in c["headline"]

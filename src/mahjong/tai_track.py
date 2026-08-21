@@ -22,7 +22,7 @@ judgment call rounds up.
 from typing import Dict, List, Optional, Tuple
 
 from mahjong.tiles import (
-    NUM_STANDARD_UNIQUE, is_honor, suit_of, Suit,
+    NUM_STANDARD_UNIQUE, is_honor, is_wind, suit_of, Suit, tile_name,
     WIND_START, DRAGON_START, FLOWER_START, ANIMAL_START,
 )
 from mahjong.hand import Hand, calculate_shanten, get_winning_tiles
@@ -259,11 +259,20 @@ def claim_consequence(hand: Hand, seat_index: int, prevailing_wind: int,
                       partners: Optional[Tuple[int, int]] = None) -> Dict:
     """Engine-computed facts about what a claim would do to the hand's
     tai potential — for the /hint payload, the claim card, and the
-    coach. A thin formatter over the same arithmetic as the gate."""
+    coach. A thin formatter over the same arithmetic as the gate.
+
+    The headline must explain THIS decision, not recite pre-existing
+    context (an observed failure: a neutral-wind pong that killed chou
+    ping hu got narrated with "ping hu is off because you hold a
+    flower" — true, irrelevant, and arguing the wrong direction). It
+    fires when the claim is catastrophic (dead hand), forfeits clean
+    ping hu, earns 0 tai (a wind that is neither seat nor prevailing),
+    or costs 2+ tai of ceiling; routine near-neutral trades stay quiet.
+    """
     counts = hand.copy_counts()
     exposed_pongs = sum(1 for kind, _ in hand.exposed if kind != "chow")
     claimed = sum(1 for kind, _ in hand.exposed if kind != "concealed_kong")
-    pinghu_before = exposed_pongs == 0 and len(hand.exposed) < 4
+    family_live = exposed_pongs == 0 and len(hand.exposed) < 4
     concealed_before = claimed == 0
 
     before = structural_tai_ceiling(counts, hand.exposed, hand.flowers,
@@ -280,24 +289,49 @@ def claim_consequence(hand: Hand, seat_index: int, prevailing_wind: int,
     after = structural_tai_ceiling(counts, exposed_after, hand.flowers,
                                    seat_index, prevailing_wind, config)
 
-    kills_pinghu = (pinghu_before and claim_type in ("pong", "kong")
-                    and not hand.flowers)
+    # A pong/kong kills the whole ping hu FAMILY — clean (4 tai) or
+    # chou (1 tai) alike. The old check required zero flowers, so the
+    # chou forfeit produced no headline at all.
+    kills_family = family_live and claim_type in ("pong", "kong")
+    clean = not hand.flowers
+    seat_wind = WIND_START + seat_index
+    zero_tai_wind = (claim_type in ("pong", "kong") and is_wind(tile_id)
+                     and tile_id != seat_wind and tile_id != prevailing_wind)
     dead_after = after < config.min_tai and not config.allow_chicken_hand
+    drop = before - after
 
     headline = None
     if dead_after:
         headline = ("Taking this claim leaves no tai source in sight — "
                     "a 0-tai hand cannot win at this table.")
-    elif kills_pinghu:
-        headline = (f"Taking this {claim_type} forfeits clean ping hu "
-                    f"(4 tai) — best achievable drops to about {after} tai.")
-    elif concealed_before and claim_type == "chow" and not hand.flowers:
-        headline = ("Claiming breaks concealment: the self-drawn 门清 "
-                    "+1 is forfeit, and ping hu must now finish on a "
-                    "two-tile wait.")
+    elif kills_family and clean:
+        headline = f"Taking this {claim_type} forfeits clean ping hu (4 tai)"
+        if zero_tai_wind:
+            headline += (f" for a {tile_name(tile_id)} pong worth 0 tai "
+                         "(neither your seat nor the prevailing wind)")
+        headline += f" — best achievable drops {before} → {after} tai."
+    elif zero_tai_wind or drop >= 2:
+        parts = []
+        if zero_tai_wind:
+            parts.append(f"{tile_name(tile_id)} is neither your seat nor "
+                         f"the prevailing wind, so this {claim_type} earns "
+                         "0 tai of its own")
+        if kills_family and not clean:
+            parts.append("it kills the chou ping hu track (1 tai)")
+        if concealed_before:
+            parts.append("it breaks concealment (门清, +1 on self-draw)")
+        if parts:
+            text = parts[0][0].upper() + parts[0][1:]
+            if len(parts) > 1:
+                text += ", and " + ", and ".join(parts[1:])
+            if drop > 0:
+                text += f" — best achievable drops {before} → {after} tai."
+            else:
+                text += "."
+            headline = text
 
     return {
-        "kills_pinghu": kills_pinghu,
+        "kills_pinghu": kills_family,
         "forfeits_menqing": concealed_before,
         "tai_ceiling_before": before,
         "tai_ceiling_after": after,

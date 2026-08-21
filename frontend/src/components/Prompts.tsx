@@ -58,14 +58,9 @@ export function ClaimPrompt({ view, pending, discarderName, coachLine,
           </div>
 
         </div>
-        {claimContext && (claimContext.kills_pinghu || claimContext.dead_after) && (
+        {claimContext?.headline && (
           <div className={`tai-cost${claimContext.dead_after ? " dead" : ""}`}>
-            {claimContext.dead_after
-              ? `Taking this leaves no tai in sight — best achievable drops ${
-                  claimContext.tai_ceiling_before} → ${claimContext.tai_ceiling_after
-                }, below the 1-tai minimum. A 0-tai hand cannot win.`
-              : `This forfeits ping hu: best achievable drops ${
-                  claimContext.tai_ceiling_before} → ${claimContext.tai_ceiling_after} tai.`}
+            {claimContext.headline}
           </div>
         )}
         <div className="claim-actions">
