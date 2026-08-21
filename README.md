@@ -54,6 +54,24 @@ Scoring follows the standard Singapore reference rules, with the house choices m
 
 If you don't play mahjong: you're trying to build a winning hand of four sets plus a pair, opponents can steal your discards, and hands are scored in "tai" — doubling points for harder patterns. A hand worth zero tai can't win at all, which turns out to matter a lot (see below).
 
+### The jargon
+
+The app and this README use a few analysis terms alongside the ones you'd hear at a Singapore table:
+
+| Term in the app | At the table | What it means |
+|---|---|---|
+| Shanten | — | How many tile swaps you are from being ready. 1 away, 2 away, etc. |
+| Tenpai / ready | 听牌 (ting pai) | One tile away from winning. |
+| Tsumo / self-draw | 自摸 (zi mo) | Winning on your own draw — everyone pays. |
+| Ron | 胡 / eating the discard | Winning off someone's discard. |
+| Deal in | 放铳 / feeding | Your discard completed someone's hand. Shooter pays all here. |
+| Chow | 吃 (chi) | Claiming a discard to make a run, from the player before you only. |
+| Pong / kong | 碰 / 杠 (gang) | Claiming a discard to make a triplet / four of a kind. |
+| Tile acceptance | — | How many different draws would improve your hand. More = flexible. |
+| Ping hu / chou ping hu | 平胡 / 臭平胡 | All-runs hand: 4 tai clean, only 1 tai once you've drawn any flower or animal. |
+| Concealed | 门清 (men qing) | No claimed sets. Worth +1 tai if you then win by self-draw. |
+| Tai ceiling | — | The most tai your hand can still make — the coach uses this to warn you before a claim kills your hand. |
+
 ## The bots
 
 There are five, from `random` (loses every game) up to `learned`. The learned one uses three small models trained on simulated games:
